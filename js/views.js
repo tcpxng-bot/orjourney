@@ -121,6 +121,7 @@ function viewLogin(){
     </div>`}
 
     <div class="notice" style="margin-top:26px">${svg('shield')}<span>ระบบนี้ไม่เก็บชื่อผู้ป่วย HN เลขบัตรประชาชน การวินิจฉัย หรือชื่อหัตถการ ข้อมูลทั้งหมดเป็นเพียงสถานะกระบวนการเท่านั้น</span></div>
+    <p class="buildstamp">build ${typeof OJ_BUILD!=='undefined'?OJ_BUILD:'—'}${DEMO_MODE?' · demo':''}</p>
   </div>`;
 }
 
@@ -150,6 +151,14 @@ async function submitLogin(){
   if(!res.ok){
     btn.disabled=false; btn.innerHTML=`${svg('logout')} เข้าสู่ระบบ`;
     err.innerHTML=`<div class="field-error">${svg('alert')} ${esc(res.msg)}</div>`;
+    return;
+  }
+  // wards / rooms / staff are only readable once signed in
+  const ws=await loadWorkspace();
+  if(!ws.ok){
+    await Auth.signOut();
+    btn.disabled=false; btn.innerHTML=`${svg('logout')} เข้าสู่ระบบ`;
+    err.innerHTML=`<div class="field-error">${svg('alert')} ${esc(ws.msg)}</div>`;
     return;
   }
   await startSession();
@@ -209,7 +218,7 @@ function toggleOnline(){Store.online=!Store.online;UI.closeSheet();render();UI.t
 
 function navFor(role){
   const N={
-    PORTER:[['home','home','งานรับ-ส่ง'],['history','history','ประวัติ']],
+    PORTER:[['home','stretcher','งานรับ-ส่ง'],['history','history','ประวัติ']],
     OR:[['or-board','scissors','กระดาน'],['dashboard','activity','ภาพรวม'],['history','history','ประวัติ']],
     RR:[['rr-board','heart','พักฟื้น'],['dashboard','activity','ภาพรวม'],['history','history','ประวัติ']],
     WARD:[['ward-board','bed','สถานะ'],['history','history','ประวัติ']],
@@ -537,7 +546,7 @@ function prResultBlock(){
       <div style="font-weight:600">ไม่พบข้อมูลที่ตรงกัน</div>
       <p style="font-size:13px;color:var(--ink-2);margin-top:6px">ตรวจสอบอวตาร์และรหัสอีกครั้ง หรือสอบถามเจ้าหน้าที่</p></div>`;
   }
-  const j=prResult, s=STATUS[j.status];
+  const j=prResult, s=STATUS[j.status] || {label:j.public_text||'อยู่ระหว่างดำเนินการ', pub:j.public_text||'อยู่ระหว่างดำเนินการ', color:'var(--sage)', tint:'var(--sage-tint)', ink:'#2f5a3d', icon:'info'};
   return `<div class="jcard" style="margin-top:16px">
     <div class="jcard-top">${avatarEl(j.avatar_id,'lg')}
       <div class="jcard-body"><div class="jcard-name" style="font-size:19px">${AV[j.avatar_id].name}<span class="jcard-code">· ${j.case_code}</span></div></div></div>
