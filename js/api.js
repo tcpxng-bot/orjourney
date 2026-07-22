@@ -257,7 +257,9 @@ const SupabaseStore = {
   },
 
   /* Relatives / PR: the ONLY public path. SECURITY DEFINER function returns a
-     public-safe subset and writes its own audit row. Never reads `journeys`. */
+     public-safe subset and writes its own audit row. Never reads `journeys`.
+     The RPC also returns a ready-made Thai label (`public_status`); we keep the
+     internal key too so the UI renders the same pill as everywhere else. */
   async publicLookup(avatarId, code, byRole){
     const { data, error } = await sb.rpc('public_status_lookup',
       { p_avatar: avatarId, p_code: code });
@@ -265,8 +267,11 @@ const SupabaseStore = {
     const row = Array.isArray(data) ? data[0] : data;
     if(!row) return null;
     return {
-      avatar_id: row.avatar_id, case_code: row.case_code,
-      status: row.status, updated_at: tsToMs(row.updated_at),
+      avatar_id: row.avatar_id,
+      case_code: row.case_code,
+      status: row.status_key || null,      // internal key, for the status pill
+      public_text: row.public_status,      // server-rendered Thai label
+      updated_at: tsToMs(row.updated_at),
     };
   },
 };
@@ -306,15 +311,31 @@ const Reference = {
       sb.from('wards').select('id, name').eq('is_active', true).order('name'),
       sb.from('or_rooms').select('id, name').eq('is_active', true).order('name'),
     ]);
-    if(w.error || r.error){
-      console.error('[OR Journey] reference load failed:', w.error || r.error);
-      return {ok:false, msg:'โหลดข้อมูลหอผู้ป่วยและห้องผ่าตัดไม่สำเร็จ'};
+    const err = w.error || r.error;
+    if(err){
+      console.error('[OR Journey] reference load failed:', err);
+      const m = (err.message||'') + ' ' + (err.details||'') + ' ' + (err.hint||'');
+      let msg;
+      if(/does not exist|relation .* does not exist|schema cache/i.test(m))
+        msg = 'ยังไม่ได้สร้างตารางในฐานข้อมูล — กรุณารัน sql/01_schema.sql ใน Supabase ก่อน';
+      else if(/permission denied|row-level security|JWT|not authenticated/i.test(m))
+        msg = 'ไม่มีสิทธิ์อ่านข้อมูลหอผู้ป่วย — กรุณาเข้าสู่ระบบใหม่ หรือตรวจว่ารัน sql/02_rls.sql แล้ว';
+      else if(/Failed to fetch|NetworkError|ERR_/i.test(m))
+        msg = 'เชื่อมต่อ Supabase ไม่ได้ — ตรวจสอบ supabaseUrl ใน js/config.js และอินเทอร์เน็ต';
+      else if(/Invalid API key|apikey/i.test(m))
+        msg = 'anon key ไม่ถูกต้อง — ตรวจสอบ supabaseAnonKey ใน js/config.js';
+      else
+        msg = 'โหลดข้อมูลหอผู้ป่วยและห้องผ่าตัดไม่สำเร็จ';
+      // Always attach the raw reason: this is an internal staff tool, and a
+      // technician cannot fix what the app refuses to name.
+      return {ok:false, msg, detail:(err.message||String(err))};
     }
     WARDS = w.data || [];
     OR_ROOMS = r.data || [];
     WARD_USERS = WARDS.slice();
     if(!WARDS.length || !OR_ROOMS.length){
-      return {ok:false, msg:'ยังไม่มีข้อมูลหอผู้ป่วยหรือห้องผ่าตัด — กรุณารัน sql/03_seed.sql ก่อน'};
+      // Tables are readable but empty -> the seed really has not been run.
+      return {ok:false, msg:'ยังไม่มีข้อมูลหอผู้ป่วยหรือห้องผ่าตัด — กรุณารัน sql/03_seed.sql ใน Supabase ก่อน'};
     }
     return {ok:true};
   },
@@ -380,6 +401,37 @@ const Staff = {
   },
 };
 
+/* Runs the four things that must work, in order, and reports the first failure.
+   Callable from the console at any time: await ojDiagnose() */
+async function ojDiagnose(){
+  const out = [];
+  const push = (step, ok, note) => out.push({step, ok, note:note||''});
+
+  push('config', !!(CFG.supabaseUrl && CFG.supabaseAnonKey),
+       CFG.supabaseUrl ? CFG.supabaseUrl : 'ยังไม่ได้กรอก js/config.js');
+  push('supabase-js', !!(window.supabase && window.supabase.createClient));
+  if(DEMO_MODE){ push('mode', true, 'DEMO MODE — ยังไม่ได้ต่อฐานข้อมูล'); console.table(out); return out; }
+
+  try {
+    const { error } = await sb.from('wards').select('id').limit(1);
+    push('read wards', !error, error ? error.message : 'ok');
+  } catch(e){ push('read wards', false, String(e)); }
+
+  try {
+    const { data } = await sb.auth.getSession();
+    push('session', true, data && data.session ? 'ล็อกอินอยู่' : 'ยังไม่ได้ล็อกอิน');
+  } catch(e){ push('session', false, String(e)); }
+
+  try {
+    const { count, error } = await sb.from('wards').select('*', {count:'exact', head:true});
+    push('wards rows', !error, error ? error.message : String(count) + ' แถว');
+  } catch(e){ push('wards rows', false, String(e)); }
+
+  console.table(out);
+  return out;
+}
+window.ojDiagnose = ojDiagnose;
+
 /* ================================================================== BOOT */
 async function initBackend(){
   if(DEMO_MODE){
@@ -396,8 +448,15 @@ async function initBackend(){
     auth: { persistSession:true, autoRefreshToken:true },
   });
   Store = SupabaseStore;
-  const ref = await Reference.load();
-  if(!ref.ok) return {mode:'error', msg:ref.msg};
-  await Staff.load();
+  // NOTE: wards / OR rooms / staff are readable only by authenticated users, so
+  // they are loaded in loadWorkspace() AFTER sign-in — not here.
   return {mode:'live'};
+}
+
+/* Everything that requires a signed-in session. Called right after auth. */
+async function loadWorkspace(){
+  const ref = await Reference.load();
+  if(!ref.ok) return ref;
+  await Staff.load();
+  return {ok:true};
 }
