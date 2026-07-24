@@ -174,9 +174,8 @@ function viewSignup(){
     <div class="tile">
       <div class="field">
         <label for="suName">ชื่อ-นามสกุล</label>
-        <div class="input-frame">
-          <input class="input" id="suName" type="text" placeholder="เช่น พว. สมหญิง ใจดี" autocomplete="name" />
-        </div>
+        <input class="input" id="suName" type="text" placeholder="เช่น พว. สมหญิง ใจดี"
+               autocomplete="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore />
         <div class="help">ชื่อนี้จะถูกบันทึกในประวัติการยืนยันป้ายข้อมือผู้ป่วย กรุณาใช้ชื่อจริง</div>
       </div>
       <div class="field">
