@@ -3,7 +3,7 @@
    Order matters: config → constants → mock → api → views → app
    ============================================================================ */
 
-const OJ_BUILD = '2026-07-22d';
+const OJ_BUILD = '2026-07-24d';
 let pendingBootMsg = null;
 
 function fatal(msg, detail){
@@ -52,6 +52,9 @@ async function boot(){
   if(mode === 'live'){
     try {
       if(await Auth.restore()){
+        if(!Session.profile || !Session.profile.is_provisioned){
+          State.screen='pending'; render(); return;
+        }
         const ws = await loadWorkspace();
         if(ws.ok){ await startSession(); return; }
         // Session is valid but the workspace can't load — show why, on the
