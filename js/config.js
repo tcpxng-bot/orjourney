@@ -19,4 +19,14 @@ window.OJ_CONFIG = {
 
   // Force demo mode even when credentials are present (useful for training).
   forceDemo: false,
+
+  // ---- Self-registration --------------------------------------------------
+  // Staff may create their own account, but it does nothing until an
+  // administrator approves it and assigns a role.
+  allowSignup: true,
+
+  // Only addresses on these domains may register. This is a convenience filter
+  // checked in the browser, NOT a security control — the real gate is admin
+  // approval. Leave the list empty to accept any address.
+  allowedEmailDomains: ['hospital.go.th'],
 };
