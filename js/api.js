@@ -44,10 +44,17 @@ function fromRow(r){
     dest: room ? room.name : 'ห้องผ่าตัด',
     staff_token: r.staff_token_active ? 'active' : null,
     public_code: r.public_code_active ? r.case_code : null,
-    verifyPorter: r.verify_porter_name ? {by:r.verify_porter_name, at:tsToMs(r.verify_porter_at)} : null,
-    verify1: r.verify1_name ? {by:r.verify1_name, at:tsToMs(r.verify1_at), solo:!!r.verify1_solo} : null,
-    verify2: r.verify2_name ? {by:r.verify2_name, at:tsToMs(r.verify2_at)} : null,
-    verifyRR: r.verify_rr_name ? {by:r.verify_rr_name, at:tsToMs(r.verify_rr_at)} : null,
+    verifyPorter: r.verify_porter_name ? {by:r.verify_porter_name, at:tsToMs(r.verify_porter_at),
+                    enteredBy:r.verify_porter_entered_name||null} : null,
+    verify1: r.verify1_name ? {by:r.verify1_name, at:tsToMs(r.verify1_at), solo:!!r.verify1_solo,
+                    enteredBy:r.verify1_entered_name||null} : null,
+    verify2: r.verify2_name ? {by:r.verify2_name, at:tsToMs(r.verify2_at),
+                    enteredBy:r.verify2_entered_name||null, copresent:!!r.verify2_copresent} : null,
+    verifyRR: r.verify_rr_name ? {by:r.verify_rr_name, at:tsToMs(r.verify_rr_at),
+                    enteredBy:r.verify_rr_entered_name||null} : null,
+    cancel_reason: r.cancel_reason || null,
+    verify1_id: r.verify1_by || null,
+    verify2_id: r.verify2_by || null,
     created_at: tsToMs(r.created_at),
     updated_at: tsToMs(r.updated_at),
     timestamps: {
@@ -114,12 +121,24 @@ const SupabaseStore = {
 
   async refreshAudit(){
     const { data, error } = await sb.from('audit_logs')
-      .select('*').order('at', {ascending:false}).limit(60);
+      .select('*').order('created_at', {ascending:false}).limit(60);
     if(error){ console.warn('[OR Journey] audit not readable (expected unless ADMIN):', error.message); return; }
+
+    // Resolve actor uuids to a readable "role · name" for the log view.
+    const ids = [...new Set((data||[]).map(a=>a.actor_id).filter(Boolean))];
+    let who = {};
+    if(ids.length){
+      const { data:profs } = await sb.from('profiles')
+        .select('id, full_name, role').in('id', ids);
+      (profs||[]).forEach(p=>{ who[p.id] = p.full_name ? `${p.role} · ${p.full_name}` : p.role; });
+    }
+
     this.audit = (data||[]).map(a=>({
-      actor:a.actor_role||a.actor||'—', action:a.action, resource_type:a.resource_type,
-      resource_id:a.resource_id, success:a.success, at:tsToMs(a.at),
-      device:a.device||'', meta:a.meta||{},
+      actor: who[a.actor_id] || (a.actor_id ? 'ผู้ใช้ที่ถูกลบ' : 'ไม่ระบุตัวตน'),
+      action: a.action, resource_type: a.resource_type,
+      resource_id: a.resource_id, success: a.success,
+      at: tsToMs(a.created_at),
+      device: a.device_info || '', meta: a.metadata || {},
     }));
   },
 
@@ -191,25 +210,36 @@ const SupabaseStore = {
 
   /* Wristband checks. We record WHO confirmed (name snapshot + uuid) — never the
      patient's name. Emergency cases allow a single-nurse check, flagged as solo. */
-  async verify(journeyId, step, nurse, byRole){
+  /* nurse = {id, name} of the person who READ the wristband.
+     opts.copresent = recorder attests the 2nd nurse was present (proxy entry). */
+  async verify(journeyId, step, nurse, byRole, opts={}){
     const j = this.journeys.find(x=>x.id===journeyId);
     if(!j) return {ok:false, msg:'ไม่พบ Journey นี้'};
     if(byRole!=='OR') return {ok:false, msg:'เฉพาะห้องผ่าตัดยืนยันตัวผู้ป่วยได้'};
-    const uid = Session.user ? Session.user.id : null;
+    const me = Session.profile || {};
+    const rec = { entered_by: me.id || null, entered_name: me.full_name || null };
     let patch;
 
     if(j.is_emergency){
       if(j.status!=='PORTER_TO_OR') return {ok:false, msg:'สถานะไม่ถูกต้องสำหรับการยืนยัน'};
-      patch = { verify1_by:uid, verify1_name:nurse, verify1_at:isoNow(), verify1_solo:true,
+      patch = { verify1_by:nurse.id, verify1_name:nurse.name, verify1_at:isoNow(), verify1_solo:true,
+                verify1_entered_by:rec.entered_by, verify1_entered_name:rec.entered_name,
                 status:'IN_OR', entered_or_at:isoNow(), updated_at:isoNow() };
     } else if(step===1){
       if(j.status!=='PORTER_TO_OR') return {ok:false, msg:'สถานะไม่ถูกต้องสำหรับการยืนยันครั้งที่ 1'};
-      patch = { verify1_by:uid, verify1_name:nurse, verify1_at:isoNow(),
+      patch = { verify1_by:nurse.id, verify1_name:nurse.name, verify1_at:isoNow(),
+                verify1_entered_by:rec.entered_by, verify1_entered_name:rec.entered_name,
                 status:'OR_VERIFY_1', updated_at:isoNow() };
     } else {
       if(j.status!=='OR_VERIFY_1') return {ok:false, msg:'ต้องยืนยันครั้งที่ 1 ก่อน'};
-      if(j.verify1 && j.verify1.by===nurse) return {ok:false, msg:'ครั้งที่ 2 ต้องเป็นพยาบาลคนละคนกับครั้งที่ 1'};
-      patch = { verify2_by:uid, verify2_name:nurse, verify2_at:isoNow(),
+      if(j.verify1_id && j.verify1_id===nurse.id)
+        return {ok:false, msg:'ครั้งที่ 2 ต้องเป็นพยาบาลคนละคนกับครั้งที่ 1'};
+      const proxy = rec.entered_by !== nurse.id;
+      if(proxy && !opts.copresent)
+        return {ok:false, msg:'กรุณายืนยันว่าพยาบาลคนที่ 2 อยู่ด้วยและตรวจป้ายข้อมือแล้ว'};
+      patch = { verify2_by:nurse.id, verify2_name:nurse.name, verify2_at:isoNow(),
+                verify2_entered_by:rec.entered_by, verify2_entered_name:rec.entered_name,
+                verify2_copresent: !!proxy,
                 status:'IN_OR', entered_or_at:isoNow(), updated_at:isoNow() };
     }
 
@@ -220,11 +250,12 @@ const SupabaseStore = {
   },
 
   /* Porter collecting from the ward: wristband check + destination room. */
-  async porterPickup(journeyId, staffName, roomId){
+  async porterPickup(journeyId, staff, roomId){
+    const me = Session.profile || {};
     const patch = {
       status:'PORTER_TO_OR', or_room_id:roomId,
-      verify_porter_by: Session.user ? Session.user.id : null,
-      verify_porter_name: staffName, verify_porter_at: isoNow(),
+      verify_porter_by: staff.id, verify_porter_name: staff.name, verify_porter_at: isoNow(),
+      verify_porter_entered_by: me.id||null, verify_porter_entered_name: me.full_name||null,
       porter_received_at: isoNow(), updated_at: isoNow(),
     };
     const { error } = await sb.from('journeys').update(patch).eq('id', journeyId);
@@ -234,15 +265,28 @@ const SupabaseStore = {
   },
 
   /* RR receiving from OR: wristband check at the handoff. */
-  async rrReceive(journeyId, staffName){
+  async rrReceive(journeyId, staff){
+    const me = Session.profile || {};
     const patch = {
       status:'IN_RR',
-      verify_rr_by: Session.user ? Session.user.id : null,
-      verify_rr_name: staffName, verify_rr_at: isoNow(),
+      verify_rr_by: staff.id, verify_rr_name: staff.name, verify_rr_at: isoNow(),
+      verify_rr_entered_by: me.id||null, verify_rr_entered_name: me.full_name||null,
       received_rr_at: isoNow(), updated_at: isoNow(),
     };
     const { error } = await sb.from('journeys').update(patch).eq('id', journeyId);
     if(error){ console.error('[OR Journey] RR receive failed:', error); return {ok:false, msg:friendly(error)}; }
+    await this.refreshOne(journeyId);
+    return {ok:true};
+  },
+
+  /* Cancel a journey. Reason comes from a fixed list — never free text. */
+  async cancelJourney(journeyId, reason, byRole){
+    const me = Session.profile || {};
+    const patch = { status:'CANCELLED', cancelled_at:isoNow(), cancel_reason:reason,
+                    cancelled_by: me.id||null,
+                    staff_token_active:false, public_code_active:false, updated_at:isoNow() };
+    const { error } = await sb.from('journeys').update(patch).eq('id', journeyId);
+    if(error){ console.error('[OR Journey] cancel failed:', error); return {ok:false, msg:friendly(error)}; }
     await this.refreshOne(journeyId);
     return {ok:true};
   },
@@ -296,6 +340,40 @@ function friendly(error){
   return 'ทำรายการไม่สำเร็จ กรุณาลองใหม่';
 }
 
+/* Pending self-registrations, and the approval actions. Approving is deliberately
+   more than a switch: the administrator must assign a role, which forces them to
+   decide who this person actually is — the name they typed will end up signed
+   against wristband checks. */
+const Approvals = {
+  async pending(){
+    if(DEMO_MODE) return [];
+    const { data, error } = await sb.from('profiles')
+      .select('id, full_name, requested_unit, approval_status, reject_reason, created_at')
+      .neq('approval_status','APPROVED').order('created_at', {ascending:false});
+    if(error){ console.error('[OR Journey] pending list failed:', error); return []; }
+    return data||[];
+  },
+  async approve(id, role, wardId, fullName){
+    const me = Session.profile || {};
+    const { error } = await sb.from('profiles').update({
+      role, ward_id: wardId||null, full_name: fullName,
+      is_provisioned:true, approval_status:'APPROVED',
+      approved_by: me.id||null, approved_at: isoNow(), updated_at: isoNow(),
+    }).eq('id', id);
+    if(error){ console.error('[OR Journey] approve failed:', error); return {ok:false,msg:friendly(error)}; }
+    return {ok:true};
+  },
+  async reject(id, reason){
+    const me = Session.profile || {};
+    const { error } = await sb.from('profiles').update({
+      is_provisioned:false, approval_status:'REJECTED', reject_reason:reason,
+      approved_by: me.id||null, approved_at: isoNow(), updated_at: isoNow(),
+    }).eq('id', id);
+    if(error){ console.error('[OR Journey] reject failed:', error); return {ok:false,msg:friendly(error)}; }
+    return {ok:true};
+  },
+};
+
 /* Reference data (wards, OR rooms). In live mode these come from the database so
    the ids are the real uuids the journeys table expects; in demo mode we fall
    back to the DEMO_* arrays. Everything downstream reads WARDS / OR_ROOMS. */
@@ -343,6 +421,31 @@ const Reference = {
 
 /* ================================================================== AUTH */
 const Auth = {
+  /* Self-registration. The account is inert until an administrator approves it,
+     so this creates a request, not access. */
+  async signUp(email, password, fullName, unit){
+    if(DEMO_MODE) return {ok:false, msg:'โหมดเดโม — ยังไม่ได้ตั้งค่า Supabase'};
+    if(CFG.allowSignup === false) return {ok:false, msg:'ระบบปิดการสมัครด้วยตนเอง กรุณาติดต่อผู้ดูแลระบบ'};
+    const dom = (CFG.allowedEmailDomains||[]);
+    if(dom.length && !dom.some(d=>email.toLowerCase().endsWith('@'+d.toLowerCase())))
+      return {ok:false, msg:'อนุญาตเฉพาะอีเมลของโรงพยาบาล (' + dom.join(', ') + ')'};
+
+    const { error } = await sb.auth.signUp({
+      email, password,
+      options:{ data:{ full_name: fullName, requested_unit: unit } },
+    });
+    if(error){
+      const m = error.message||'';
+      if(/already registered|already exists/i.test(m))
+        return {ok:false, msg:'อีเมลนี้มีบัญชีอยู่แล้ว — ลองเข้าสู่ระบบ หรือติดต่อผู้ดูแลระบบ'};
+      if(/Password/i.test(m))
+        return {ok:false, msg:'รหัสผ่านสั้นเกินไป ต้องมีอย่างน้อย 6 ตัวอักษร'};
+      console.error('[OR Journey] signup failed:', error);
+      return {ok:false, msg:'สมัครไม่สำเร็จ กรุณาลองใหม่'};
+    }
+    return {ok:true};
+  },
+
   async signIn(email, password){
     if(DEMO_MODE) return {ok:false, msg:'โหมดเดโม — ยังไม่ได้ตั้งค่า Supabase'};
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
@@ -359,12 +462,12 @@ const Auth = {
 
   async loadProfile(){
     const { data, error } = await sb.from('profiles')
-      .select('id, full_name, role, ward_id').eq('id', Session.user.id).single();
+      .select('id, full_name, role, ward_id, is_provisioned, approval_status, reject_reason')
+      .eq('id', Session.user.id).single();
     if(error || !data){
       console.error('[OR Journey] profile load failed:', error);
       return {ok:false, msg:'ไม่พบโปรไฟล์ผู้ใช้ — กรุณาติดต่อผู้ดูแลระบบ'};
     }
-    if(!data.role) return {ok:false, msg:'บัญชีนี้ยังไม่ได้กำหนดบทบาท — กรุณาติดต่อผู้ดูแลระบบ'};
     Session.profile = data;
     return {ok:true};
   },
@@ -384,21 +487,68 @@ const Auth = {
   },
 };
 
-/* Staff name lists for the "who confirmed" pickers. In demo mode these are the
-   mock arrays from constants.js; with Supabase they come from `profiles`. */
+/* Staff lists for the "who confirmed" pickers — entries are {id, name}.
+   The id matters: it is what the two-different-nurses rule compares, so a name
+   collision between two staff can never look like the same person.
+   In LIVE mode we never substitute demo names — a wristband check signed by a
+   fictional nurse would corrupt the audit trail. */
 const Staff = {
-  OR: [], PORTER: [], RR: [],
+  OR: [], PORTER: [], RR: [], error: null,
   async load(){
-    if(DEMO_MODE){ this.OR=OR_STAFF.slice(); this.PORTER=PORTER_STAFF.slice(); this.RR=RR_STAFF.slice(); return; }
-    const { data, error } = await sb.from('profiles').select('full_name, role').eq('active', true);
-    if(error){ console.warn('[OR Journey] staff list unavailable:', error.message);
-               this.OR=OR_STAFF.slice(); this.PORTER=PORTER_STAFF.slice(); this.RR=RR_STAFF.slice(); return; }
-    const by = r => (data||[]).filter(p=>p.role===r).map(p=>p.full_name).filter(Boolean);
+    this.error = null;
+    if(DEMO_MODE){
+      const mk = (arr,p) => arr.map((n,i)=>({id:`demo-${p}-${i}`, name:n}));
+      this.OR=mk(OR_STAFF,'or'); this.PORTER=mk(PORTER_STAFF,'porter'); this.RR=mk(RR_STAFF,'rr');
+      return {ok:true};
+    }
+    // is_provisioned matters here: a self-registered account can set its own
+    // full_name during sign-up, so an unapproved name could otherwise appear in
+    // the "who confirmed" picker and end up signed against a wristband check.
+    const { data, error } = await sb.from('profiles')
+      .select('id, full_name, role').eq('is_active', true).eq('is_provisioned', true);
+    if(error){
+      console.error('[OR Journey] staff list failed:', error);
+      this.OR=[]; this.PORTER=[]; this.RR=[];
+      this.error = error.message || 'อ่านรายชื่อเจ้าหน้าที่ไม่ได้';
+      return {ok:false, msg:'โหลดรายชื่อเจ้าหน้าที่ไม่สำเร็จ', detail:this.error};
+    }
+    const by = r => (data||[])
+      .filter(p=>p.role===r && p.full_name && p.full_name.trim())
+      .map(p=>({id:p.id, name:p.full_name.trim()}))
+      .sort((a,b)=>a.name.localeCompare(b.name,'th'));
     this.OR = by('OR'); this.PORTER = by('PORTER'); this.RR = by('RR');
-    if(!this.OR.length) this.OR = OR_STAFF.slice();
-    if(!this.PORTER.length) this.PORTER = PORTER_STAFF.slice();
-    if(!this.RR.length) this.RR = RR_STAFF.slice();
+
+    // The two-nurse check needs two *different* OR staff to be selectable.
+    if(this.OR.length < 2){
+      return {ok:false,
+        msg:'ต้องมีเจ้าหน้าที่ห้องผ่าตัดอย่างน้อย 2 คนที่ตั้งชื่อแล้ว จึงจะยืนยันตัวผู้ป่วย 2 ครั้งได้',
+        detail:'พบบัญชี role=OR ที่มี full_name จำนวน ' + this.OR.length + ' คน'};
+    }
+    if(!this.PORTER.length || !this.RR.length){
+      return {ok:false,
+        msg:'ยังไม่มีเจ้าหน้าที่หน่วยเปลหรือห้องพักฟื้นที่ตั้งชื่อไว้',
+        detail:'PORTER=' + this.PORTER.length + ', RR=' + this.RR.length +
+               ' — ต้องตั้ง full_name ในตาราง profiles'};
+    }
+    return {ok:true};
   },
+
+  /* The signed-in user as a picker entry, so their own name can be the default. */
+  me(){
+    const p = Session.profile;
+    if(!p) return null;
+    return {id:p.id, name:p.full_name || 'ฉัน'};
+  },
+
+  /* Picker options for a role, with the signed-in user first if they belong. */
+  optionsFor(role){
+    const list = (this[role]||[]).slice();
+    const me = this.me();
+    if(me && Session.profile.role===role && !list.some(s=>s.id===me.id)) list.unshift(me);
+    return list;
+  },
+
+  find(role, id){ return (this[role]||[]).find(s=>s.id===id) || (this.me() && this.me().id===id ? this.me() : null); },
 };
 
 /* Runs the four things that must work, in order, and reports the first failure.
@@ -457,6 +607,7 @@ async function initBackend(){
 async function loadWorkspace(){
   const ref = await Reference.load();
   if(!ref.ok) return ref;
-  await Staff.load();
+  const st = await Staff.load();
+  if(!st.ok) return st;
   return {ok:true};
 }
