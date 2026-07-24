@@ -86,30 +86,47 @@ const MockStore = {
 
   /* two-nurse identity verification. Records WHICH nurse confirmed the wristband
      matched — never the patient's name. step 2 must be a different nurse. */
-  async verify(journeyId, step, nurse, byRole){
+  async verify(journeyId, step, nurse, byRole, opts={}){
     const j=this.journeys.find(x=>x.id===journeyId);
     if(!j) return {ok:false,msg:'ไม่พบ Journey นี้'};
     if(byRole!=='OR'){this.audit.unshift(auditRow(byRole,'INVALID_TRANSITION','journey',j.id,false,{verify:step}));return {ok:false,msg:'เฉพาะห้องผ่าตัดยืนยันตัวผู้ป่วยได้'}}
     // Emergency: identity is still verified, but one nurse is enough — recorded honestly as a single-nurse check.
+    const me = Session.profile || {};
+    const rec = me.full_name || null;
     if(j.is_emergency){
       if(j.status!=='PORTER_TO_OR') return {ok:false,msg:'สถานะไม่ถูกต้องสำหรับการยืนยัน'};
-      j.verify1={by:nurse, at:now(), solo:true};
+      j.verify1={by:nurse.name, id:nurse.id, at:now(), solo:true, enteredBy:rec};
       j.status='IN_OR'; j.updated_at=now(); j.timestamps.verify1_at=now(); j.timestamps.entered_or_at=now();
-      this.logEvent(j.id,'IDENTITY_VERIFIED',{step:1, nurse, emergency:true, solo:true});
-      this.audit.unshift(auditRow(byRole,'IDENTITY_VERIFIED','journey',j.id,true,{nurse, emergency:true, solo:true}));
+      this.logEvent(j.id,'IDENTITY_VERIFIED',{step:1, nurse:nurse.name, emergency:true, solo:true});
+      this.audit.unshift(auditRow(byRole,'IDENTITY_VERIFIED','journey',j.id,true,{nurse:nurse.name, emergency:true, solo:true}));
       this.emit();
       return {ok:true};
     }
     if(step===1){
       if(j.status!=='PORTER_TO_OR') return {ok:false,msg:'สถานะไม่ถูกต้องสำหรับการยืนยันครั้งที่ 1'};
-      j.verify1={by:nurse, at:now()}; j.status='OR_VERIFY_1'; j.updated_at=now(); j.timestamps.verify1_at=now();
+      j.verify1={by:nurse.name, id:nurse.id, at:now(), enteredBy:rec};
+      j.status='OR_VERIFY_1'; j.updated_at=now(); j.timestamps.verify1_at=now();
     } else {
       if(j.status!=='OR_VERIFY_1') return {ok:false,msg:'ต้องยืนยันครั้งที่ 1 ก่อน'};
-      if(j.verify1 && j.verify1.by===nurse) return {ok:false,msg:'ครั้งที่ 2 ต้องเป็นพยาบาลคนละคนกับครั้งที่ 1'};
-      j.verify2={by:nurse, at:now()}; j.status='IN_OR'; j.updated_at=now(); j.timestamps.entered_or_at=now();
+      if(j.verify1 && j.verify1.id===nurse.id) return {ok:false,msg:'ครั้งที่ 2 ต้องเป็นพยาบาลคนละคนกับครั้งที่ 1'};
+      const proxy = (me.id||null) !== nurse.id;
+      if(proxy && !opts.copresent) return {ok:false,msg:'กรุณายืนยันว่าพยาบาลคนที่ 2 อยู่ด้วยและตรวจป้ายข้อมือแล้ว'};
+      j.verify2={by:nurse.name, id:nurse.id, at:now(), enteredBy:rec, copresent:!!proxy};
+      j.status='IN_OR'; j.updated_at=now(); j.timestamps.entered_or_at=now();
     }
-    this.logEvent(j.id,'IDENTITY_VERIFIED',{step, nurse});
-    this.audit.unshift(auditRow(byRole,'IDENTITY_VERIFIED','journey',j.id,true,{step, nurse}));
+    this.logEvent(j.id,'IDENTITY_VERIFIED',{step, nurse:nurse.name});
+    this.audit.unshift(auditRow(byRole,'IDENTITY_VERIFIED','journey',j.id,true,{step, nurse:nurse.name}));
+    this.emit();
+    return {ok:true};
+  },
+
+  async cancelJourney(journeyId, reason, byRole){
+    const j=this.journeys.find(x=>x.id===journeyId);
+    if(!j) return {ok:false,msg:'ไม่พบ Journey นี้'};
+    j.status='CANCELLED'; j.cancel_reason=reason; j.updated_at=now();
+    j.timestamps.cancelled_at=now(); j.staff_token=null; j.public_code=null;
+    this.logEvent(j.id,'JOURNEY_CANCELLED',{reason});
+    this.audit.unshift(auditRow(byRole,'JOURNEY_CANCELLED','journey',j.id,true,{reason}));
     this.emit();
     return {ok:true};
   },
@@ -139,10 +156,10 @@ async function seedMock(){
     if(st!=='WAITING_PORTER') T.porter_received_at=j.created_at+3*M;
     // fill stage timestamps consistent with how far the case has progressed
     if(['OR_VERIFY_1','IN_OR','SURGERY_FINISHED','IN_RR'].includes(st)){
-      T.verify1_at=j.created_at+12*M; j.verify1={by:OR_STAFF[0],at:T.verify1_at};
+      T.verify1_at=j.created_at+12*M; j.verify1={by:OR_STAFF[0], id:'demo-or-0', at:T.verify1_at, enteredBy:OR_STAFF[0]};
     }
     if(['IN_OR','SURGERY_FINISHED','IN_RR'].includes(st)){
-      T.entered_or_at=j.created_at+20*M; j.verify2={by:OR_STAFF[1],at:T.entered_or_at};
+      T.entered_or_at=j.created_at+20*M; j.verify2={by:OR_STAFF[1], id:'demo-or-1', at:T.entered_or_at, enteredBy:OR_STAFF[1]};
     }
     if(['SURGERY_FINISHED','IN_RR'].includes(st)) T.surgery_finished_at=j.created_at+55*M;
     if(st==='IN_RR') T.received_rr_at=j.created_at+62*M;
@@ -160,7 +177,7 @@ async function seedMock(){
       T.received_rr_at=T.surgery_finished_at+6*M;
       T.completed_at=T.received_rr_at+rr*M;
       j.updated_at=T.completed_at;
-      j.verify1={by:OR_STAFF[0],at:T.verify1_at}; j.verify2={by:OR_STAFF[1],at:T.entered_or_at};
+      j.verify1={by:OR_STAFF[0], id:'demo-or-0', at:T.verify1_at, enteredBy:OR_STAFF[0]}; j.verify2={by:OR_STAFF[1], id:'demo-or-1', at:T.entered_or_at, enteredBy:OR_STAFF[1]};
       j.staff_token=null; j.public_code=null; // revoked on completion
   }
   MockStore.audit=MockStore.audit.slice(0,4); // trim seed noise

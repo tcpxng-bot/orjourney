@@ -54,11 +54,16 @@ function ddDispatch(id, val){
   if(id==='wardSel'){ State.wardId=val; render(); }
   else if(id==='srcWard'){ CForm.src=val; }
   else if(id==='destOR'){ CForm.dest=val; }
-  else if(id==='vNurse'){ _vNurse=val; }
+  else if(id==='vNurse'){ _vNurse=val; _vPickOpen=true; refreshVerifier(); }
   else if(id==='vRoom'){ _vRoom=val; }
   else if(id==='pRoom'){ _pRoom=val; }
   else if(id==='pStaff'){ _pStaff=val; }
   else if(id==='rStaff'){ _rStaff=val; }
+  else if(id==='cReason'){ _cReason=val; }
+  else if(id==='suUnit'){ _suUnit=val; }
+  else if(id==='apvRole'){ _apvRole=val; }
+  else if(id==='apvWard'){ _apvWard=val; }
+  else if(id==='apvReject'){ _apvReject=val; }
   else if(id==='eWard'){ _eWard=val; }
   else if(id==='eRoom'){ _eRoom=val; }
 }
@@ -73,16 +78,28 @@ const UI = {
   closeSheet(){document.getElementById('scrim').classList.remove('open');document.getElementById('sheet').classList.remove('open')},
 };
 
+const BARE_SCREENS = ['login','signup','signup-done','pending'];
+
 /* ============================================================ RENDER ====== */
 function render(){
   const app=document.getElementById('app');
-  if(State.screen==='login'){app.innerHTML=viewLogin();return}
+  // Login / signup / pending render on their own, with no app chrome around them.
+  if(BARE_SCREENS.includes(State.screen)){
+    app.innerHTML = State.screen==='login'       ? viewLogin()
+                  : State.screen==='signup'      ? viewSignup()
+                  : State.screen==='signup-done' ? viewSignupDone()
+                  :                                viewPending();
+    return;
+  }
   app.innerHTML = `<div class="shell">${sidebar()}<div class="main">${topbar()}<div class="viewport fade" id="vp">${screenBody()}</div></div></div>${bottomnav()}`;
 }
 
 function screenBody(){
   switch(State.screen){
     case 'home': return roleHome();
+    case 'signup': return viewSignup();
+    case 'signup-done': return viewSignupDone();
+    case 'pending': return viewPending();
     case 'dashboard': return dashboardView();
     case 'or-board': return orBoard();
     case 'rr-board': return rrBoard();
@@ -118,7 +135,8 @@ function viewLogin(){
       <div id="loginErr"></div>
       <button class="btn btn-accent" id="loginBtn" onclick="submitLogin()">${svg('logout')} เข้าสู่ระบบ</button>
       <p class="help" style="text-align:center;margin-top:12px">บทบาทและหอผู้ป่วยกำหนดจากบัญชีของคุณ<br>หากเข้าไม่ได้ กรุณาติดต่อผู้ดูแลระบบ</p>
-    </div>`}
+    </div>
+    ${CFG.allowSignup!==false?`<button class="btn btn-soft" style="margin-top:12px" onclick="go('signup')">${svg('plus')} สมัครใช้งาน (สำหรับเจ้าหน้าที่ใหม่)</button>`:''}`}
 
     <div class="notice" style="margin-top:26px">${svg('shield')}<span>ระบบนี้ไม่เก็บชื่อผู้ป่วย HN เลขบัตรประชาชน การวินิจฉัย หรือชื่อหัตถการ ข้อมูลทั้งหมดเป็นเพียงสถานะกระบวนการเท่านั้น</span></div>
     <p class="buildstamp">build ${typeof OJ_BUILD!=='undefined'?OJ_BUILD:'—'}${DEMO_MODE?' · demo':''}</p>
@@ -139,6 +157,93 @@ function demoRolePicker(){
     </div>`;
 }
 
+/* Units the applicant can claim. Chosen from a list rather than typed so the
+   approval screen can compare like with like. */
+function signupUnits(){
+  return [...WARD_USERS.map(w=>w.name), 'ห้องผ่าตัด (OR)', 'ห้องพักฟื้น (RR)', 'หน่วยเปล', 'ประชาสัมพันธ์', 'อื่น ๆ'];
+}
+let _suUnit='';
+
+function viewSignup(){
+  const dom=(CFG.allowedEmailDomains||[]);
+  return `<div class="login-wrap fade">
+    <button class="btn-ghost" onclick="go('login')" style="align-self:flex-start;margin-bottom:6px">${svg('arrowLeft')} กลับ</button>
+    <h1 style="font-size:26px">สมัครใช้งาน</h1>
+    <p class="tag">สำหรับเจ้าหน้าที่ของโรงพยาบาลเท่านั้น</p>
+    <div class="notice" style="margin-bottom:16px">${svg('info')}<span>เมื่อสมัครแล้ว บัญชีจะยัง<b>ใช้งานไม่ได้</b>จนกว่าผู้ดูแลระบบจะตรวจสอบและอนุมัติ พร้อมกำหนดบทบาทให้</span></div>
+    <div class="tile">
+      <div class="field">
+        <label for="suName">ชื่อ-นามสกุล</label>
+        <input class="input" id="suName" type="text" placeholder="เช่น พว. สมหญิง ใจดี" autocomplete="name" />
+        <div class="help">ชื่อนี้จะถูกบันทึกในประวัติการยืนยันป้ายข้อมือผู้ป่วย กรุณาใช้ชื่อจริง</div>
+      </div>
+      <div class="field">
+        <label>หน่วยงานที่สังกัด</label>
+        ${dd('suUnit', signupUnits().map(u=>({v:u,label:u})), '', '— เลือกหน่วยงาน —')}
+      </div>
+      <div class="field">
+        <label for="suEmail">อีเมล</label>
+        <input class="input" id="suEmail" type="email" inputmode="email" autocomplete="username"
+               placeholder="${dom.length?'name@'+dom[0]:'name@hospital.go.th'}" />
+        ${dom.length?`<div class="help">ใช้ได้เฉพาะอีเมล ${dom.map(d=>'@'+d).join(' หรือ ')}</div>`:''}
+      </div>
+      <div class="field">
+        <label for="suPass">ตั้งรหัสผ่าน</label>
+        <input class="input" id="suPass" type="password" autocomplete="new-password" placeholder="อย่างน้อย 6 ตัวอักษร"
+               onkeydown="if(event.key==='Enter')submitSignup()" />
+      </div>
+      <div id="suErr"></div>
+      <button class="btn btn-accent" id="suBtn" onclick="submitSignup()">${svg('check')} ส่งคำขอสมัคร</button>
+    </div>
+  </div>`;
+}
+
+async function submitSignup(){
+  const btn=document.getElementById('suBtn'), err=document.getElementById('suErr');
+  const name=(document.getElementById('suName').value||'').trim();
+  const email=(document.getElementById('suEmail').value||'').trim();
+  const pass=document.getElementById('suPass').value||'';
+  err.innerHTML='';
+  const fail=m=>{err.innerHTML=`<div class="field-error">${svg('alert')} ${esc(m)}</div>`;};
+  if(name.length<3) return fail('กรุณากรอกชื่อ-นามสกุลให้ครบ');
+  if(!_suUnit)      return fail('กรุณาเลือกหน่วยงานที่สังกัด');
+  if(!email||!pass) return fail('กรุณากรอกอีเมลและรหัสผ่าน');
+  btn.disabled=true; btn.innerHTML=`<span class="spin"></span> กำลังส่งคำขอ...`;
+  const res=await Auth.signUp(email, pass, name, _suUnit);
+  btn.disabled=false; btn.innerHTML=`${svg('check')} ส่งคำขอสมัคร`;
+  if(!res.ok) return fail(res.msg);
+  State.screen='signup-done'; render();
+}
+
+function viewSignupDone(){
+  return `<div class="login-wrap fade">
+    <div class="brandmark">${svg('checkCircle')}</div>
+    <h1>ส่งคำขอแล้ว</h1>
+    <p class="tag">ผู้ดูแลระบบจะตรวจสอบและอนุมัติบัญชีของคุณ</p>
+    <div class="tile"><p class="help" style="margin:0">เมื่อได้รับอนุมัติแล้ว คุณจะเข้าสู่ระบบด้วยอีเมลและรหัสผ่านที่ตั้งไว้ได้ทันที<br><br>
+    หากรอนานผิดปกติ กรุณาติดต่อผู้ดูแลระบบของหน่วยงาน</p></div>
+    <button class="btn btn-soft" style="margin-top:16px" onclick="go('login')">${svg('arrowLeft')} กลับหน้าเข้าสู่ระบบ</button>
+  </div>`;
+}
+
+/* Signed in, but not yet approved: everything is withheld until an admin acts. */
+function viewPending(){
+  const p=Session.profile||{};
+  const rejected = p.approval_status==='REJECTED';
+  return `<div class="login-wrap fade">
+    <div class="brandmark">${svg(rejected?'x':'hourglass')}</div>
+    <h1>${rejected?'คำขอไม่ได้รับอนุมัติ':'รอการอนุมัติ'}</h1>
+    <p class="tag">${rejected?'กรุณาติดต่อผู้ดูแลระบบของหน่วยงาน':'ผู้ดูแลระบบยังไม่ได้อนุมัติบัญชีนี้'}</p>
+    <div class="tile" style="text-align:left">
+      <div class="log-row"><div class="log-ic">${svg('user')}</div><div class="log-main">
+        <div class="log-act">${esc(p.full_name||'(ยังไม่ได้ตั้งชื่อ)')}</div>
+        <div class="log-meta">${esc((Session.user&&Session.user.email)||'')}</div></div></div>
+      ${rejected&&p.reject_reason?`<div class="notice emerg-notice" style="margin-top:10px">${svg('info')}<span>เหตุผล: ${esc(p.reject_reason)}</span></div>`:''}
+    </div>
+    <button class="btn btn-soft" style="margin-top:16px" onclick="logout()">${svg('logout')} ออกจากระบบ</button>
+  </div>`;
+}
+
 async function submitLogin(){
   const btn=document.getElementById('loginBtn');
   const email=(document.getElementById('loginEmail').value||'').trim();
@@ -153,12 +258,17 @@ async function submitLogin(){
     err.innerHTML=`<div class="field-error">${svg('alert')} ${esc(res.msg)}</div>`;
     return;
   }
+  // An unapproved account can read nothing, so stop before loading the workspace.
+  if(!Session.profile || !Session.profile.is_provisioned){
+    State.screen='pending'; render(); return;
+  }
   // wards / rooms / staff are only readable once signed in
   const ws=await loadWorkspace();
   if(!ws.ok){
     await Auth.signOut();
     btn.disabled=false; btn.innerHTML=`${svg('logout')} เข้าสู่ระบบ`;
-    err.innerHTML=`<div class="field-error">${svg('alert')} ${esc(ws.msg)}</div>`;
+    err.innerHTML=`<div class="field-error">${svg('alert')} ${esc(ws.msg)}</div>`
+      + (ws.detail?`<p class="errdetail" style="margin-top:8px">${esc(ws.detail)}</p>`:'');
     return;
   }
   await startSession();
@@ -167,6 +277,12 @@ async function submitLogin(){
 function demoLogin(role){
   State.role=role;
   State.wardId = role==='WARD' ? WARD_USERS[0].id : null;
+  // Give demo mode a signed-in identity too, so "default to me" behaves the
+  // same way it will in production.
+  const first = (Staff[role]||[])[0];
+  Session.profile = { id: first ? first.id : 'demo-'+role,
+                      full_name: first ? first.name : ROLES[role].name,
+                      role, ward_id: State.wardId };
   Store.audit.unshift(auditRow(role,'LOGIN_SUCCESS','session',null,true));
   State.screen=defaultScreen(role);
   render();
@@ -187,6 +303,7 @@ async function startSession(){
 
 async function logout(){
   await Auth.signOut();
+  Session.profile=null;
   State.role=null; State.wardId=null; State.screen='login';
   UI.closeSheet(); render();
 }
@@ -218,7 +335,7 @@ function toggleOnline(){Store.online=!Store.online;UI.closeSheet();render();UI.t
 
 function navFor(role){
   const N={
-    PORTER:[['home','stretcher','งานรับ-ส่ง'],['history','history','ประวัติ']],
+    PORTER:[['home','home','งานรับ-ส่ง'],['history','history','ประวัติ']],
     OR:[['or-board','scissors','กระดาน'],['dashboard','activity','ภาพรวม'],['history','history','ประวัติ']],
     RR:[['rr-board','heart','พักฟื้น'],['dashboard','activity','ภาพรวม'],['history','history','ประวัติ']],
     WARD:[['ward-board','bed','สถานะ'],['history','history','ประวัติ']],
@@ -317,12 +434,13 @@ function openFamilyCard(jid, isNew){
       <div class="fam-top">${avatarEl(j.avatar_id,'lg')}
         <div><div class="fam-name">${a.name}</div><div class="fam-ward">${esc(j.ward_name)}</div></div></div>
       <div class="fam-code-wrap"><div class="fam-code-lb">รหัสติดตาม</div><div class="fam-code">${j.case_code}</div></div>
-      <ol class="fam-how">
-        <li>เปิดหน้าติดตามสถานะของโรงพยาบาล</li>
-        <li>เลือกอวตาร์ <b>${a.name}</b></li>
-        <li>กรอกรหัส <b>${j.case_code}</b></li>
-      </ol>
-      <p class="fam-note">หน้านี้แสดงเฉพาะสถานะกระบวนการ ไม่มีข้อมูลการรักษา · กรุณาเก็บรหัสไว้เฉพาะในครอบครัว</p>
+      <div class="fam-how">
+        <div class="fam-how-h">วิธีสอบถามสถานะ</div>
+        <p>แจ้ง <b>${a.name}</b> และรหัส <b>${j.case_code}</b> กับเจ้าหน้าที่ประชาสัมพันธ์
+        เพื่อสอบถามว่าผู้ป่วยอยู่ในขั้นตอนใด</p>
+      </div>
+      <p class="fam-note">ระบบแจ้งเฉพาะขั้นตอนการเดินทางของผู้ป่วย ไม่มีข้อมูลการรักษาหรือผลการผ่าตัด<br>
+      กรุณาเก็บรหัสนี้ไว้เฉพาะในครอบครัว · หากต้องการทราบข้อมูลทางการแพทย์ กรุณาติดต่อทีมผู้รักษา</p>
     </div>
     <div class="fam-actions">
       <button class="btn btn-primary" onclick="printFamilyCard('${j.id}')">${svg('printer')} พิมพ์สลิป</button>
@@ -339,24 +457,13 @@ function printFamilyCard(jid){
     <div class="slip-name">${a.name}</div>
     <div class="slip-code">${j.case_code}</div>
     <div class="slip-ward">${esc(j.ward_name)}</div>
-    <ol class="slip-how"><li>เปิดหน้าติดตามสถานะของโรงพยาบาล</li><li>เลือกอวตาร์ ${a.name}</li><li>กรอกรหัส ${j.case_code}</li></ol>
-    <div class="slip-note">แสดงเฉพาะสถานะกระบวนการ ไม่มีข้อมูลการรักษา<br>กรุณาเก็บรหัสไว้เฉพาะในครอบครัว</div>
+    <div class="slip-how"><b>วิธีสอบถามสถานะ</b><br>
+      แจ้งชื่ออวตาร์ “${a.name}” และรหัส ${j.case_code}<br>กับเจ้าหน้าที่ประชาสัมพันธ์</div>
+    <div class="slip-note">ระบบแจ้งเฉพาะขั้นตอนการเดินทางของผู้ป่วย ไม่มีข้อมูลการรักษา<br>กรุณาเก็บรหัสนี้ไว้เฉพาะในครอบครัว</div>
   </div>`;
   window.print();
 }
 
-function qrBlock(j){
-  return `<div class="qr-box"><div class="qr">${qrSVG(j.staff_token)}</div>
-    <div style="font-size:12.5px;color:var(--ink-2);font-weight:500">QR สำหรับเจ้าหน้าที่ (ภายใน)</div>
-    <div class="token">token hash · ${j.staff_token.slice(0,20)}…</div></div>`;
-}
-/* decorative deterministic QR-looking grid from token (mock only) */
-function qrSVG(token){
-  let seed=0;for(const c of token)seed=(seed*31+c.charCodeAt(0))>>>0;
-  const n=13,cells=[];for(let i=0;i<n*n;i++){seed=(seed*1103515245+12345)&0x7fffffff;cells.push(seed%100<46)}
-  let r='';for(let y=0;y<n;y++)for(let x=0;x<n;x++){if(cells[y*n+x])r+=`<rect x="${x}" y="${y}" width="1" height="1"/>`}
-  return `<svg viewBox="0 0 ${n} ${n}" width="100%" height="100%" fill="#2B2A28">${r}</svg>`;
-}
 
 /* ---------------------------- OR BOARD ----------------------------------- */
 function orBoard(){
@@ -561,7 +668,6 @@ function prResultBlock(){
 function openJourney(id){
   const j=Store.journeys.find(x=>x.id===id);if(!j)return;
   const action=(TRANSITIONS[j.status]||[]).find(t=>t.role===State.role);
-  const canSeeQR = ['PORTER','OR','RR'].includes(State.role);
   UI.openSheet(`
     <div class="jcard-top" style="padding:0 0 4px">${avatarEl(j.avatar_id,'lg')}
       <div class="jcard-body"><div class="jcard-name" style="font-size:20px">${AV[j.avatar_id].name}<span class="jcard-code">· ${j.case_code}</span>${j.is_emergency?`<span class="em-chip">ฉุกเฉิน</span>`:''}${j.or_room?`<span class="room-chip">${esc(j.or_room)}</span>`:''}</div>
@@ -569,17 +675,17 @@ function openJourney(id){
     <div style="margin:14px 0">${statusPill(j.status)}</div>
     ${(j.verifyPorter||j.verify1||j.verify2||j.verifyRR)?`<div class="verify-box">
       <div class="eyebrow" style="margin-bottom:8px">${svg('wristband')} การยืนยันป้ายข้อมือผู้ป่วย</div>
-      ${j.verifyPorter?`<div class="verify-row"><span class="chk-box on">${svg('check')}</span><span>รับจากหอผู้ป่วย · ${esc(j.verifyPorter.by)} · ${fmtTime(j.verifyPorter.at)}</span></div>`:''}
+      ${verifyLine('รับจากหอผู้ป่วย', j.verifyPorter)}
       ${j.is_emergency
-        ? `<div class="verify-row"><span class="chk-box ${j.verify1?'on':''}">${j.verify1?svg('check'):''}</span><span>เข้าห้องผ่าตัด (ฉุกเฉิน · ยืนยันคนเดียว) · ${j.verify1?esc(j.verify1.by)+' · '+fmtTime(j.verify1.at):'รอยืนยัน'}</span></div>`
-        : `<div class="verify-row"><span class="chk-box ${j.verify1?'on':''}">${j.verify1?svg('check'):''}</span><span>ห้องผ่าตัด ครั้งที่ 1 · ${j.verify1?esc(j.verify1.by)+' · '+fmtTime(j.verify1.at):'รอยืนยัน'}</span></div>
-           <div class="verify-row"><span class="chk-box ${j.verify2?'on':''}">${j.verify2?svg('check'):''}</span><span>ห้องผ่าตัด ครั้งที่ 2 · ${j.verify2?esc(j.verify2.by)+' · '+fmtTime(j.verify2.at):'รอยืนยัน'}</span></div>`}
-      ${j.verifyRR?`<div class="verify-row"><span class="chk-box on">${svg('check')}</span><span>รับเข้าห้องพักฟื้น · ${esc(j.verifyRR.by)} · ${fmtTime(j.verifyRR.at)}</span></div>`:''}
+        ? verifyLine('เข้าห้องผ่าตัด (ฉุกเฉิน · ยืนยันคนเดียว)', j.verify1)
+        : verifyLine('ห้องผ่าตัด ครั้งที่ 1', j.verify1) + verifyLine('ห้องผ่าตัด ครั้งที่ 2', j.verify2)}
+      ${verifyLine('รับเข้าห้องพักฟื้น', j.verifyRR)}
     </div>`:''}
     <div class="eyebrow" style="margin:18px 0 12px">เส้นทางการเดินทาง</div>
     ${timeline(j)}
     ${action?`<button class="btn btn-primary" onclick="doAction('${j.id}','${action.to}')" style="margin-top:8px">${svg(action.icon)} ${action.label}</button>`:''}
-    ${canSeeQR && j.staff_token?`<details style="margin-top:16px"><summary style="cursor:pointer;font-size:13.5px;color:var(--ink-2);font-weight:600;padding:8px 0">${svg('qr')} QR / โทเคนเจ้าหน้าที่</summary>${qrBlock(j)}</details>`:''}
+    ${canCancel(j)?`<button class="btn btn-soft danger-soft" style="margin-top:10px" onclick="openCancelSheet('${j.id}')">${svg('x')} ยกเลิก Journey นี้</button>`:''}
+    ${j.status==='CANCELLED'&&j.cancel_reason?`<div class="notice emerg-notice" style="margin-top:14px">${svg('info')}<span>ยกเลิกแล้ว · เหตุผล: ${esc(j.cancel_reason)}</span></div>`:''}
     <button class="btn btn-ghost" style="margin:14px auto 0;width:auto" onclick="UI.closeSheet()">ปิด</button>
   `);
 }
@@ -596,17 +702,165 @@ function timeline(j){
   }).join('')}</div>`;
 }
 
+/* One row of the chain of custody. Names the nurse who attested, and — when
+   somebody else typed it in — says so plainly rather than crediting the typist. */
+function verifyLine(label, v){
+  if(!v) return `<div class="verify-row"><span class="chk-box"></span><span>${label} · รอยืนยัน</span></div>`;
+  const proxy = v.enteredBy && v.enteredBy !== v.by;
+  return `<div class="verify-row"><span class="chk-box on">${svg('check')}</span>
+    <span>${label} · <b>${esc(v.by)}</b> · ${fmtTime(v.at)}
+      ${proxy?`<span class="proxy-note">บันทึกโดย ${esc(v.enteredBy)}${v.copresent?' · ยืนยันว่าอยู่ด้วย':''}</span>`
+             :`<span class="self-note">ยืนยันด้วยตนเอง</span>`}</span></div>`;
+}
+
+/* ---------------------------- APPROVALS ---------------------------------- */
+let _apvRole='', _apvWard='', _apvName='', _apvReject='';
+
+async function loadApprovals(){
+  const box=document.getElementById('apvBox'); if(!box) return;
+  if(DEMO_MODE){
+    box.innerHTML = `<div class="notice">${svg('info')}<span>โหมดเดโมไม่มีคำขอจริง — ในระบบจริงคำขอที่เจ้าหน้าที่สมัครเข้ามาจะแสดงที่นี่</span></div>`;
+    return;
+  }
+  const list = await Approvals.pending();
+  const waiting = list.filter(p=>p.approval_status==='PENDING');
+  const rejected = list.filter(p=>p.approval_status==='REJECTED');
+  box.innerHTML = `
+    <p class="sheet-sub">รอตรวจสอบ ${waiting.length} คำขอ</p>
+    <div class="notice" style="margin-bottom:10px">${svg('shield')}<span>ชื่อที่ผู้สมัครกรอกจะถูกบันทึกในประวัติการยืนยันป้ายข้อมือผู้ป่วย <b>กรุณาตรวจสอบว่าเป็นเจ้าหน้าที่จริงก่อนอนุมัติ</b></span></div>
+    ${waiting.length ? waiting.map(apvRow).join('')
+      : `<div class="ok-note">${svg('checkCircle')} ไม่มีคำขอค้างอยู่</div>`}
+    ${rejected.length?`<div class="eyebrow" style="margin:16px 0 6px">ไม่อนุมัติ · ${rejected.length}</div>`+
+      rejected.map(p=>`<div class="log-row"><div class="log-ic">${svg('x')}</div><div class="log-main">
+        <div class="log-act">${esc(p.full_name||'(ไม่ระบุชื่อ)')}</div>
+        <div class="log-meta">${esc(p.requested_unit||'—')}${p.reject_reason?' · '+esc(p.reject_reason):''}</div></div></div>`).join(''):''}`;
+}
+
+function apvRow(p){
+  return `<div class="apv-card">
+    <div class="apv-h"><b>${esc(p.full_name||'(ไม่ระบุชื่อ)')}</b>
+      <span class="apv-when">${p.created_at?fmtTime(new Date(p.created_at).getTime()):''}</span></div>
+    <div class="apv-unit">${svg('bed','rc-ic')} แจ้งว่าสังกัด: ${esc(p.requested_unit||'—')}</div>
+    <div class="apv-actions">
+      <button class="btn btn-primary" onclick="openApprove('${p.id}','${esc(p.full_name||'')}')">${svg('userCheck')} ตรวจสอบและอนุมัติ</button>
+      <button class="btn btn-soft danger-soft" onclick="openReject('${p.id}')">${svg('x')} ไม่อนุมัติ</button>
+    </div>
+  </div>`;
+}
+
+function openApprove(id, name){
+  _apvRole=''; _apvWard=''; _apvName=name;
+  UI.openSheet(`
+    <h3>อนุมัติเจ้าหน้าที่</h3>
+    <p class="sheet-sub">กำหนดบทบาทและหน่วยงานให้ถูกต้อง</p>
+    <div class="tile" style="margin-bottom:14px">
+      <div class="field">
+        <label for="apvName">ชื่อที่จะใช้ในระบบ</label>
+        <input class="input" id="apvName" type="text" value="${esc(name)}" oninput="_apvName=this.value" />
+        <div class="help">แก้ให้ตรงกับชื่อจริงได้ ชื่อนี้จะปรากฏในประวัติการยืนยันป้ายข้อมือ</div>
+      </div>
+      <div class="field">
+        <label>บทบาท</label>
+        ${dd('apvRole', ['WARD','PORTER','OR','RR','PR','ADMIN'].map(r=>({v:r,label:ROLES[r].name+' ('+r+')'})), '', '— เลือกบทบาท —')}
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>หอผู้ป่วย <span class="help" style="display:inline">(เฉพาะบทบาทหอผู้ป่วย)</span></label>
+        ${dd('apvWard', WARD_USERS.map(w=>({v:w.id,label:w.name})), '', '— เลือกหอผู้ป่วย —')}
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="commitApprove('${id}')">${svg('check')} อนุมัติ</button>
+    <button class="btn btn-ghost" style="margin:10px auto 0;width:auto" onclick="UI.closeSheet();adminOpen('approvals')">ยกเลิก</button>
+  `);
+}
+async function commitApprove(id){
+  if(!_apvName || _apvName.trim().length<3){UI.toast('กรุณากรอกชื่อ-นามสกุลให้ครบ','err');return}
+  if(!_apvRole){UI.toast('กรุณาเลือกบทบาท','err');return}
+  if(_apvRole==='WARD' && !_apvWard){UI.toast('บทบาทหอผู้ป่วยต้องระบุหอผู้ป่วย','err');return}
+  const res=await Approvals.approve(id,_apvRole,_apvRole==='WARD'?_apvWard:null,_apvName.trim());
+  if(!res.ok){UI.toast(res.msg,'err');return}
+  await Staff.load();
+  UI.closeSheet(); UI.toast('อนุมัติแล้ว','ok'); adminOpen('approvals');
+}
+
+function openReject(id){
+  _apvReject='';
+  UI.openSheet(`
+    <h3>ไม่อนุมัติคำขอ</h3>
+    <p class="sheet-sub">บัญชีจะยังเข้าใช้งานไม่ได้ และเก็บไว้ดูย้อนหลัง</p>
+    <div class="tile" style="margin-bottom:14px">
+      <div class="field" style="margin-bottom:0">
+        <label>เหตุผล</label>
+        ${dd('apvReject', ['ไม่ใช่เจ้าหน้าที่ของหน่วยงาน','ข้อมูลไม่ครบหรือไม่ถูกต้อง','ซ้ำกับบัญชีเดิม','เหตุผลอื่น'].map(r=>({v:r,label:r})), '', '— เลือกเหตุผล —')}
+      </div>
+    </div>
+    <button class="btn btn-emerg" onclick="commitReject('${id}')">${svg('x')} ยืนยันไม่อนุมัติ</button>
+    <button class="btn btn-ghost" style="margin:10px auto 0;width:auto" onclick="UI.closeSheet();adminOpen('approvals')">ยกเลิก</button>
+  `);
+}
+async function commitReject(id){
+  if(!_apvReject){UI.toast('กรุณาเลือกเหตุผล','err');return}
+  const res=await Approvals.reject(id,_apvReject);
+  if(!res.ok){UI.toast(res.msg,'err');return}
+  UI.closeSheet(); UI.toast('บันทึกแล้ว','ok'); adminOpen('approvals');
+}
+
+/* ---------------------------- CANCEL ------------------------------------- */
+/* A ward may cancel only before a porter has collected the patient; after that
+   the patient is physically moving and an admin has to do it, so a ward can't
+   make a patient in transit disappear from everyone's board. */
+const CANCEL_REASONS = ['เลื่อนผ่าตัด','ยกเลิกผ่าตัด','สร้างรายการผิด','ผู้ป่วยปฏิเสธการผ่าตัด','เหตุผลอื่น'];
+let _cReason='';
+
+function canCancel(j){
+  if(['COMPLETED','CANCELLED'].includes(j.status)) return false;
+  if(State.role==='ADMIN') return true;
+  if(State.role==='WARD') return j.status==='WAITING_PORTER' && j.ward_id===State.wardId;
+  return false;
+}
+function openCancelSheet(jid){
+  const j=Store.journeys.find(x=>x.id===jid); if(!j)return;
+  _cReason='';
+  UI.openSheet(`
+    <h3>ยกเลิก Journey</h3>
+    <p class="sheet-sub">${AV[j.avatar_id].name} · ${j.case_code}</p>
+    <div class="notice emerg-notice" style="margin-bottom:14px">${svg('alert')}<span>เมื่อยกเลิกแล้ว รหัสติดตามของญาติจะใช้ไม่ได้ทันที และรายการจะหายจากกระดานของทุกหน่วย · ย้อนกลับไม่ได้</span></div>
+    <div class="tile" style="margin-bottom:14px">
+      <div class="field" style="margin-bottom:0">
+        <label>เหตุผลที่ยกเลิก</label>
+        ${dd('cReason', CANCEL_REASONS.map(r=>({v:r,label:r})), '', '— เลือกเหตุผล —')}
+        <div class="help">เลือกจากรายการเท่านั้น เพื่อไม่ให้มีการพิมพ์ข้อมูลผู้ป่วยลงระบบ</div>
+      </div>
+    </div>
+    <button class="btn btn-emerg" onclick="commitCancel('${j.id}')">${svg('x')} ยืนยันการยกเลิก</button>
+    <button class="btn btn-ghost" style="margin:10px auto 0;width:auto" onclick="UI.closeSheet()">ไม่ยกเลิก</button>
+  `);
+}
+async function commitCancel(jid){
+  if(!_cReason){UI.toast('กรุณาเลือกเหตุผลที่ยกเลิก','err');return}
+  if(!Store.online){UI.toast('ไม่มีการเชื่อมต่อ — โปรดลองใหม่','err');return}
+  const res=await Store.cancelJourney(jid,_cReason,State.role);
+  if(!res.ok){UI.toast(res.msg,'err');return}
+  UI.closeSheet(); UI.toast('ยกเลิก Journey แล้ว','ok'); render();
+}
+
 /* ---------------------------- IDENTITY VERIFY (two-nurse) ---------------- */
-let _vChecked=false, _vNurse='', _vRoom='';
+let _vChecked=false, _vNurse='', _vRoom='', _vCoPresent=false, _vPickOpen=false, _vStep=1, _vExclude=null;
 function openVerifySheet(j, step){
-  _vChecked=false; _vNurse=''; _vRoom=j.or_room_id||'';
-  const other = step===2 && j.verify1 ? j.verify1.by : null;
-  const pool = Staff.OR.filter(n=>n!==other); // step 2 must be a different nurse
+  const me = Staff.me();
+  // Default the attester to the signed-in user — the common case is that the
+  // person holding the device is the one who just read the wristband.
+  const mine = me && Staff.optionsFor('OR').some(s=>s.id===me.id) ? me.id : '';
+  _vChecked=false; _vRoom=j.or_room_id||''; _vCoPresent=false;
+  _vNurse = step===2 ? '' : mine;      // step 2 must be someone else, so start empty
+  _vStep = step; _vExclude = (step===2 && j.verify1) ? j.verify1.id : null;
+  _vPickOpen = step===2;               // ...and open the picker straight away
+
+  const pool = Staff.optionsFor('OR').filter(n=>!(step===2 && j.verify1 && j.verify1.id===n.id));
   UI.openSheet(`
     <h3>${j.is_emergency?'ยืนยันตัวผู้ป่วย · เคสฉุกเฉิน':`ยืนยันตัวผู้ป่วย · ครั้งที่ ${step}/2`}</h3>
     <p class="sheet-sub">${AV[j.avatar_id].name} · ${j.case_code}</p>
     ${j.is_emergency?`<div class="notice emerg-notice" style="margin:2px 0 14px">${svg('alert')}<span>เคสฉุกเฉิน — ใช้พยาบาลยืนยันคนเดียวได้ ระบบจะบันทึกตามจริงว่าเป็นการยืนยันโดยคนเดียว</span></div>`:''}
-    ${step===2 && j.verify1?`<div class="notice" style="margin:2px 0 14px">${svg('userCheck')}<span>ครั้งที่ 1 ยืนยันโดย ${esc(j.verify1.by)} — ครั้งที่ 2 ต้องเป็นพยาบาลคนละคน</span></div>`:''}
+    ${step===2 && j.verify1?`<div class="notice" style="margin:2px 0 14px">${svg('userCheck')}<span>ครั้งที่ 1 ยืนยันโดย <b>${esc(j.verify1.by)}</b> — ครั้งที่ 2 ต้องเป็นพยาบาลคนละคน</span></div>`:''}
     <div class="tile" style="margin-bottom:14px">
       <div style="font-size:14.5px;font-weight:600;margin-bottom:4px">ตรวจสอบป้ายข้อมือผู้ป่วย</div>
       <p style="font-size:13px;color:var(--ink-2);line-height:1.5;margin-bottom:12px">อ่านชื่อ-นามสกุลจากป้ายข้อมือ และตรวจสอบว่าตรงกับผู้ป่วยรายนี้ ระบบจะบันทึกเพียงว่า “ยืนยันแล้ว” และผู้ยืนยัน โดย<b>ไม่เก็บชื่อผู้ป่วย</b></p>
@@ -614,10 +868,13 @@ function openVerifySheet(j, step){
         <span class="chk-box">${svg('check')}</span>
         <span>ชื่อ-นามสกุลตรงกับป้ายข้อมือ</span>
       </label>
+
       <div class="field" style="margin-top:14px">
         <label>ผู้ยืนยัน (พยาบาลครั้งที่ ${step})</label>
-        ${dd('vNurse', pool.map(n=>({v:n,label:n})), '', '— เลือกพยาบาล —')}
+        <div id="vNurseBox">${verifierField(pool, _vNurse, _vPickOpen, me)}</div>
       </div>
+      <div id="vCoBox">${coPresentField(step, _vNurse, me)}</div>
+
       ${step===1&&!j.is_emergency?`<div class="field" style="margin-top:12px">
         <label>ห้องผ่าตัด</label>
         ${dd('vRoom', OR_ROOMS.map(o=>({v:o.id,label:o.name})), j.or_room_id||'', '— เลือกห้อง —')}
@@ -628,6 +885,43 @@ function openVerifySheet(j, step){
     <button class="btn btn-ghost" style="margin:10px auto 0;width:auto" onclick="UI.closeSheet()">ยกเลิก</button>
   `);
 }
+
+/* Either "it's me" (one tap, with a link to change) or the full picker. */
+function verifierField(pool, curId, pickOpen, me){
+  if(!pickOpen && me && curId===me.id){
+    return `<div class="self-row">
+      <span class="self-ic">${svg('userCheck')}</span>
+      <span class="self-name">${esc(me.name)}<span class="self-tag">ฉัน</span></span>
+      <button type="button" class="linkbtn" onclick="verifierPick()">เปลี่ยนผู้ยืนยัน</button>
+    </div>`;
+  }
+  return dd('vNurse', pool.map(n=>({v:n.id,label:n.name})), curId, '— เลือกพยาบาล —')
+       + (me && pool.some(n=>n.id===me.id) && curId!==me.id
+          ? `<button type="button" class="linkbtn" style="margin-top:8px" onclick="verifierSelf()">ใช้ชื่อฉัน (${esc(me.name)})</button>` : '');
+}
+function verifierPick(){ _vPickOpen=true; refreshVerifier(); }
+function verifierSelf(){ const me=Staff.me(); if(me){_vNurse=me.id;} _vPickOpen=false; refreshVerifier(); }
+function refreshVerifier(){
+  const me=Staff.me();
+  const pool=Staff.optionsFor('OR').filter(n=>!(_vExclude && n.id===_vExclude));
+  const box=document.getElementById('vNurseBox');
+  if(box) box.innerHTML=verifierField(pool,_vNurse,_vPickOpen,me);
+  const co=document.getElementById('vCoBox');
+  if(co) co.innerHTML=coPresentField(_vStep,_vNurse,me);
+}
+
+/* Shown only when the 2nd check is being typed in by someone else. */
+function coPresentField(step, nurseId, me){
+  if(step!==2 || !nurseId) return '';
+  if(me && nurseId===me.id) return '';
+  const n = Staff.find('OR', nurseId);
+  return `<div class="notice" style="margin-top:14px">${svg('info')}<span>คุณกำลังบันทึกแทน <b>${esc(n?n.name:'พยาบาลคนที่ 2')}</b> ระบบจะบันทึกว่าคุณเป็นผู้กด</span></div>
+    <label class="chk ${_vCoPresent?'on':''}" style="margin-top:6px" onclick="_vCoPresent=!_vCoPresent;this.classList.toggle('on',_vCoPresent)">
+      <span class="chk-box">${svg('check')}</span>
+      <span>ยืนยันว่า${esc(n?n.name:'พยาบาลคนที่ 2')}อยู่ด้วยและตรวจป้ายข้อมือแล้ว</span>
+    </label>`;
+}
+
 async function commitVerify(jid, step){
   if(!_vChecked){UI.toast('กรุณาติ๊กยืนยันว่าตรงกับป้ายข้อมือ','err');return}
   if(!_vNurse){UI.toast('กรุณาเลือกพยาบาลผู้ยืนยัน','err');return}
@@ -637,17 +931,21 @@ async function commitVerify(jid, step){
     const j=Store.journeys.find(x=>x.id===jid), r=OR_ROOMS.find(o=>o.id===_vRoom);
     if(j&&r){j.or_room_id=r.id; j.or_room=r.name; j.dest=r.name;}
   }
-  const res=await Store.verify(jid, step, _vNurse, State.role);
+  const nurse = Staff.find('OR', _vNurse);
+  if(!nurse){UI.toast('ไม่พบข้อมูลพยาบาลที่เลือก','err');return}
+  const res=await Store.verify(jid, step, nurse, State.role, {copresent:_vCoPresent});
+  if(!res.ok){UI.toast(res.msg,'err');return}   // keep the sheet open so it can be corrected
   UI.closeSheet();
-  if(res.ok){UI.toast(_j?.is_emergency?'ยืนยันแล้ว · เริ่มผ่าตัด':(step===2?'ยืนยันครบ 2 คน · เริ่มผ่าตัด':'ยืนยันตัวครั้งที่ 1 แล้ว'),'ok');render()}
-  else UI.toast(res.msg,'err');
+  UI.toast(_j?.is_emergency?'ยืนยันแล้ว · เริ่มผ่าตัด':(step===2?'ยืนยันครบ 2 คน · เริ่มผ่าตัด':'ยืนยันตัวครั้งที่ 1 แล้ว'),'ok');
+  render();
 }
 
 /* Porter accepts a ward-created job and picks the destination OR room,
    because the porter is the one who needs to know where to take the patient. */
 let _pRoom='', _pChecked=false, _pStaff='';
 function openPickupSheet(j){
-  _pRoom = j.or_room_id||''; _pChecked=false; _pStaff='';
+  _pRoom = j.or_room_id||''; _pChecked=false;
+  { const me=Staff.me(); _pStaff = (me && Staff.optionsFor('PORTER').some(x=>x.id===me.id)) ? me.id : ''; }
   UI.openSheet(`
     <h3>รับผู้ป่วยจากหอผู้ป่วย</h3>
     <p class="sheet-sub">${AV[j.avatar_id].name} · ${j.case_code}</p>
@@ -659,7 +957,8 @@ function openPickupSheet(j){
       </label>
       <div class="field" style="margin-top:14px">
         <label>ผู้รับผู้ป่วย (หน่วยเปล)</label>
-        ${dd('pStaff', Staff.PORTER.map(n=>({v:n,label:n})), '', '— เลือกเจ้าหน้าที่ —')}
+        ${dd('pStaff', Staff.optionsFor('PORTER').map(n=>({v:n.id,label:n.name})), _pStaff, '— เลือกเจ้าหน้าที่ —')}
+        <div class="help">เติมชื่อผู้ที่ล็อกอินไว้ให้แล้ว เปลี่ยนได้หากบันทึกแทนคนอื่น</div>
       </div>
       <div class="field" style="margin-bottom:0">
         <label>นำส่งไปห้องผ่าตัด</label>
@@ -676,9 +975,11 @@ async function commitPickup(jid){
   if(!_pStaff){UI.toast('กรุณาเลือกเจ้าหน้าที่ผู้รับ','err');return}
   if(!_pRoom){UI.toast('กรุณาเลือกห้องผ่าตัดปลายทาง','err');return}
   const r=OR_ROOMS.find(o=>o.id===_pRoom);
+  const staff = Staff.find('PORTER', _pStaff);
+  if(!staff){UI.toast('ไม่พบข้อมูลเจ้าหน้าที่ที่เลือก','err');return}
   const res = Store.porterPickup
-    ? await Store.porterPickup(jid, _pStaff, _pRoom)
-    : await mockPickup(jid, _pStaff, r);
+    ? await Store.porterPickup(jid, staff, _pRoom)
+    : await mockPickup(jid, staff, r);
   UI.closeSheet();
   if(res.ok){UI.toast(`ยืนยันป้ายข้อมือแล้ว · นำส่ง ${r.name}`,'ok');render()}
   else UI.toast(res.msg,'err');
@@ -687,7 +988,8 @@ async function commitPickup(jid){
 /* RR receives the patient from OR — same wristband check at the handoff. */
 let _rChecked=false, _rStaff='';
 function openRRReceiveSheet(j){
-  _rChecked=false; _rStaff='';
+  _rChecked=false;
+  { const me=Staff.me(); _rStaff = (me && Staff.optionsFor('RR').some(x=>x.id===me.id)) ? me.id : ''; }
   UI.openSheet(`
     <h3>รับผู้ป่วยเข้าห้องพักฟื้น</h3>
     <p class="sheet-sub">${AV[j.avatar_id].name} · ${j.case_code}${j.or_room?' · '+esc(j.or_room):''}</p>
@@ -699,7 +1001,8 @@ function openRRReceiveSheet(j){
       </label>
       <div class="field" style="margin:14px 0 0">
         <label>ผู้รับผู้ป่วย (ห้องพักฟื้น)</label>
-        ${dd('rStaff', Staff.RR.map(n=>({v:n,label:n})), '', '— เลือกพยาบาล —')}
+        ${dd('rStaff', Staff.optionsFor('RR').map(n=>({v:n.id,label:n.name})), _rStaff, '— เลือกพยาบาล —')}
+        <div class="help">เติมชื่อผู้ที่ล็อกอินไว้ให้แล้ว เปลี่ยนได้หากบันทึกแทนคนอื่น</div>
       </div>
     </div>
     <button class="btn btn-primary" onclick="commitRRReceive('${j.id}')">${svg('heart')} รับเข้าห้องพักฟื้น</button>
@@ -709,9 +1012,11 @@ function openRRReceiveSheet(j){
 async function commitRRReceive(jid){
   if(!_rChecked){UI.toast('กรุณาติ๊กยืนยันว่าตรงกับป้ายข้อมือ','err');return}
   if(!_rStaff){UI.toast('กรุณาเลือกพยาบาลผู้รับ','err');return}
+  const staff = Staff.find('RR', _rStaff);
+  if(!staff){UI.toast('ไม่พบข้อมูลพยาบาลที่เลือก','err');return}
   const res = Store.rrReceive
-    ? await Store.rrReceive(jid, _rStaff)
-    : await mockRRReceive(jid, _rStaff);
+    ? await Store.rrReceive(jid, staff)
+    : await mockRRReceive(jid, staff);
   UI.closeSheet();
   if(res.ok){UI.toast('ยืนยันป้ายข้อมือแล้ว · รับเข้า RR','ok');render()}
   else UI.toast(res.msg,'err');
@@ -809,7 +1114,8 @@ function auditView(){
 /* ---------------------------- ADMIN -------------------------------------- */
 function adminView(){
   const sections=[
-    ['users','จัดการผู้ใช้','เพิ่ม ปิด/เปิดใช้งานบัญชี และกำหนดบทบาท','users'],
+    ['approvals','คำขอสมัครใช้งาน','ตรวจสอบและอนุมัติเจ้าหน้าที่ที่สมัครเข้ามา','userCheck'],
+    ['users','จัดการผู้ใช้','รายชื่อเจ้าหน้าที่และบทบาท','users'],
     ['roles','บทบาทและสิทธิ์','ควบคุมสิ่งที่แต่ละบทบาทเข้าถึงได้','shield'],
     ['wards','วอร์ด','จัดการหอผู้ป่วยและปลายทาง','bed'],
     ['rooms','ห้องผ่าตัด','จัดการห้อง OR และสถานี','door'],
@@ -832,27 +1138,75 @@ function adminView(){
 }
 function adminOpen(k){
   const map={
-    wards:`<h3>วอร์ด</h3><p class="sheet-sub">${WARDS.length} หอผู้ป่วย</p>${WARDS.map(w=>`<div class="log-row"><div class="log-ic">${svg('bed')}</div><div class="log-main"><div class="log-act">${w.name}</div><div class="log-meta">${w.id}</div></div></div>`).join('')}`,
+    approvals: '<h3>คำขอสมัครใช้งาน</h3><div id="apvBox"><p class="help">กำลังโหลด...</p></div>',
+    users: adminUsers(),
+    roles: adminRoles(),
+    wards:`<h3>วอร์ด</h3><p class="sheet-sub">${WARDS.length} หอผู้ป่วย</p>${WARDS.map(w=>`<div class="log-row"><div class="log-ic">${svg('bed')}</div><div class="log-main"><div class="log-act">${esc(w.name)}</div></div></div>`).join('')}<p class="help" style="margin-top:12px">แก้ไขได้ที่ตาราง <code>wards</code> ใน Supabase · เคสเก่าอ้างด้วย id จึงไม่กระทบประวัติ</p>`,
+    rooms:`<h3>ห้องผ่าตัด</h3><p class="sheet-sub">${OR_ROOMS.length} ห้อง</p>${OR_ROOMS.map(o=>{
+        const busy=Store.journeys.find(j=>j.or_room_id===o.id && ['OR_VERIFY_1','IN_OR'].includes(j.status));
+        return `<div class="log-row"><div class="log-ic">${svg('door')}</div><div class="log-main"><div class="log-act">${esc(o.name)}</div><div class="log-meta">${busy?'กำลังใช้งาน · '+AV[busy.avatar_id].name:'ว่าง'}</div></div></div>`;
+      }).join('')}<p class="help" style="margin-top:12px">แก้ไขได้ที่ตาราง <code>or_rooms</code> ใน Supabase</p>`,
     avatars:`<h3>อวตาร์</h3><p class="sheet-sub">ชุดอวตาร์ธรรมชาติ นุ่มนวล เป็นกลาง</p><div class="avgrid">${AVATARS.map(a=>`<div class="avpick">${avatarEl(a.id,'sm')}<span class="nm">${a.name}</span></div>`).join('')}</div>`,
     status:`<h3>ป้ายสถานะ</h3><p class="sheet-sub">ภายใน → สาธารณะ</p>${FLOW.map(st=>`<div class="log-row"><div class="log-ic" style="color:${STATUS[st].ink}">${svg(STATUS[st].icon)}</div><div class="log-main"><div class="log-act">${STATUS[st].label}</div><div class="log-meta">${st} · ${STATUS[st].pub}</div></div></div>`).join('')}`,
   };
-  UI.openSheet((map[k]||`<h3>${k}</h3><p class="sheet-sub">ส่วนนี้เป็นตัวอย่างในเดโม</p>`)+`<button class="btn btn-ghost" style="margin:14px auto 0;width:auto" onclick="UI.closeSheet()">ปิด</button>`);
+  UI.openSheet((map[k]||`<h3>${k}</h3><p class="sheet-sub">ยังไม่พร้อมใช้งาน</p>`)+`<button class="btn btn-ghost" style="margin:14px auto 0;width:auto" onclick="UI.closeSheet()">ปิด</button>`);
+  if(k==='approvals') loadApprovals();
 }
+
+/* Read-only directory. Accounts cannot be created from the browser: that needs
+   the service_role key, which must never reach a client. */
+function adminUsers(){
+  const groups=['ADMIN','OR','RR','PORTER','WARD','PR'];
+  const all=[...(Staff.OR||[]),...(Staff.RR||[]),...(Staff.PORTER||[])];
+  const rows=groups.map(r=>{
+    const list=(Staff[r]||[]);
+    if(!list.length) return '';
+    return `<div class="eyebrow" style="margin:14px 0 6px">${ROLES[r]?ROLES[r].name:r} · ${list.length} คน</div>` +
+      list.map(u=>`<div class="log-row"><div class="log-ic" style="background:${ROLES[r]?ROLES[r].tint:'var(--line)'};color:${ROLES[r]?ROLES[r].ink:'var(--ink-2)'}">${svg(ROLES[r]?ROLES[r].icon:'user')}</div>
+        <div class="log-main"><div class="log-act">${esc(u.name)}</div><div class="log-meta">${r}</div></div></div>`).join('');
+  }).join('');
+  return `<h3>จัดการผู้ใช้</h3><p class="sheet-sub">${all.length} บัญชีที่ตั้งชื่อแล้ว</p>
+    <div class="notice" style="margin-bottom:6px">${svg('shield')}<span>การสร้างบัญชีและกำหนดบทบาททำที่ Supabase เท่านั้น — หน้าเว็บทำไม่ได้เพราะต้องใช้กุญแจระดับสูงซึ่งห้ามอยู่ในเบราว์เซอร์</span></div>
+    ${rows || '<p class="help">ยังไม่มีบัญชีที่ตั้ง full_name</p>'}
+    <p class="help" style="margin-top:14px">เพิ่มหรือแก้ไข: Supabase → Authentication → Add user แล้วรัน <code>sql/05_bulk_staff.sql</code></p>`;
+}
+
+/* The permission matrix is documentation, not a control panel: the real rules
+   live in Row Level Security and cannot be edited from here by design. */
+function adminRoles(){
+  const rows=[
+    ['WARD','สร้าง Journey · ยกเลิกก่อนหน่วยเปลมารับ','เห็นเฉพาะหอผู้ป่วยของตนเอง'],
+    ['PORTER','รับผู้ป่วย · ยืนยันป้ายข้อมือ · เลือกห้อง OR','เห็นคิวรอรับและเคสที่กำลังนำส่ง'],
+    ['OR','ยืนยันตัวผู้ป่วย 2 ครั้ง · เปิดเคสฉุกเฉิน · ผ่าตัดเสร็จ','เห็นเคสช่วงที่อยู่ในความดูแล'],
+    ['RR','รับเข้าห้องพักฟื้น · ส่งกลับหอผู้ป่วย','เห็นเคสที่ผ่าตัดเสร็จและกำลังพักฟื้น'],
+    ['PR','ค้นหาสถานะให้ญาติด้วยอวตาร์ + รหัส','ไม่เห็นรายการเคส เห็นเฉพาะผลค้นหา'],
+    ['ADMIN','ยกเลิก/พักเคส · ดูบันทึกตรวจสอบ','เห็นทั้งหมด'],
+  ];
+  return `<h3>บทบาทและสิทธิ์</h3><p class="sheet-sub">บังคับใช้จริงที่ระดับฐานข้อมูล</p>
+    <div class="notice" style="margin-bottom:10px">${svg('shield')}<span>ตารางนี้แสดงเพื่อดูเท่านั้น แก้จากหน้าเว็บไม่ได้ — สิทธิ์จริงบังคับด้วย Row Level Security ใน Postgres จึงข้ามผ่านหน้าเว็บไม่ได้</span></div>
+    ${rows.map(([r,can,see])=>`<div class="role-card">
+      <div class="role-card-h"><span class="ro-ic" style="background:${ROLES[r].tint};color:${ROLES[r].ink}">${svg(ROLES[r].icon)}</span><b>${ROLES[r].name}</b></div>
+      <div class="role-card-b"><div>${svg('check','rc-ic')} ${can}</div><div>${svg('user','rc-ic')} ${see}</div></div>
+    </div>`).join('')}`;
+}
+
 
 
 /* ---- demo-only helpers (the Supabase store has real methods for these) ---- */
 async function mockPickup(jid, staff, room){
   const j=Store.journeys.find(x=>x.id===jid); if(!j) return {ok:false,msg:'ไม่พบ Journey นี้'};
   if(room){ j.or_room_id=room.id; j.or_room=room.name; j.dest=room.name; }
-  j.verifyPorter={by:staff, at:now()};
-  Store.logEvent(j.id,'IDENTITY_VERIFIED',{stage:'PORTER',staff});
-  Store.audit.unshift(auditRow(State.role,'IDENTITY_VERIFIED','journey',j.id,true,{stage:'PORTER',staff}));
+  const me=Staff.me();
+  j.verifyPorter={by:staff.name, id:staff.id, at:now(), enteredBy:me?me.name:null};
+  Store.logEvent(j.id,'IDENTITY_VERIFIED',{stage:'PORTER',staff:staff.name});
+  Store.audit.unshift(auditRow(State.role,'IDENTITY_VERIFIED','journey',j.id,true,{stage:'PORTER',staff:staff.name}));
   return Store.transition(jid,'PORTER_TO_OR',State.role);
 }
 async function mockRRReceive(jid, staff){
   const j=Store.journeys.find(x=>x.id===jid); if(!j) return {ok:false,msg:'ไม่พบ Journey นี้'};
-  j.verifyRR={by:staff, at:now()};
-  Store.logEvent(j.id,'IDENTITY_VERIFIED',{stage:'RR',staff});
-  Store.audit.unshift(auditRow(State.role,'IDENTITY_VERIFIED','journey',j.id,true,{stage:'RR',staff}));
+  const me=Staff.me();
+  j.verifyRR={by:staff.name, id:staff.id, at:now(), enteredBy:me?me.name:null};
+  Store.logEvent(j.id,'IDENTITY_VERIFIED',{stage:'RR',staff:staff.name});
+  Store.audit.unshift(auditRow(State.role,'IDENTITY_VERIFIED','journey',j.id,true,{stage:'RR',staff:staff.name}));
   return Store.transition(jid,'IN_RR',State.role);
 }
