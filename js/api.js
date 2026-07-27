@@ -353,10 +353,10 @@ const Approvals = {
     if(error){ console.error('[OR Journey] pending list failed:', error); return []; }
     return data||[];
   },
-  async approve(id, role, wardId, fullName, extraRoles){
+  async approve(id, role, wardId, fullName){
     const me = Session.profile || {};
     const { error } = await sb.from('profiles').update({
-      role, extra_roles: extraRoles||[], ward_id: wardId||null, full_name: fullName,
+      role, ward_id: wardId||null, full_name: fullName,
       is_provisioned:true, approval_status:'APPROVED',
       approved_by: me.id||null, approved_at: isoNow(), updated_at: isoNow(),
     }).eq('id', id);
@@ -467,13 +467,12 @@ const Auth = {
 
   async loadProfile(){
     const { data, error } = await sb.from('profiles')
-      .select('id, full_name, role, ward_id, is_provisioned, approval_status, reject_reason, extra_roles')
+      .select('id, full_name, role, ward_id, is_provisioned, approval_status, reject_reason')
       .eq('id', Session.user.id).single();
     if(error || !data){
       console.error('[OR Journey] profile load failed:', error);
       return {ok:false, msg:'ไม่พบโปรไฟล์ผู้ใช้ — กรุณาติดต่อผู้ดูแลระบบ'};
     }
-    data.roles = rolesOf(data);
     Session.profile = data;
     return {ok:true};
   },
@@ -614,6 +613,9 @@ async function loadWorkspace(){
   const ref = await Reference.load();
   if(!ref.ok) return ref;
   const st = await Staff.load();
-  if(!st.ok) return st;
-  return {ok:true};
+  // ADMIN must be able to enter an incomplete workspace so they can approve
+  // accounts and assign the staff roles needed to make it operational.
+  // Clinical roles remain blocked until the staffing rules are satisfied.
+  if(!st.ok && (!Session.profile || Session.profile.role !== 'ADMIN')) return st;
+  return {ok:true, warning:st.ok ? null : st};
 }
