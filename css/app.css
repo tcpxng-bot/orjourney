@@ -555,6 +555,8 @@ code{font-family:var(--mono);background:rgba(0,0,0,.05);padding:1px 5px;border-r
 .inp{position:relative;display:flex;align-items:center}
 .inp .inp-ic{position:absolute;left:14px;color:var(--ink-3);pointer-events:none;width:18px;height:18px}
 .inp .input{padding-left:44px}
+.inp .input:has(+ .email-suffix){padding-right:112px}
+.email-suffix{position:absolute;right:14px;color:var(--ink-3);font-size:14px;pointer-events:none}
 .or-sep{display:flex;align-items:center;gap:13px;margin:18px 0;color:var(--ink-3);font-size:13px}
 .or-sep i{flex:1;height:1px;background:var(--line)}
 
