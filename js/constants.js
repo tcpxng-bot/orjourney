@@ -161,3 +161,15 @@ const ROLES = {
   ADMIN:{name:'ผู้ดูแลระบบ', desc:'จัดการผู้ใช้ วอร์ด และระบบ', color:'var(--ink-3)', tint:'var(--line)', ink:'#4a463f', icon:'shield'},
 };
 
+
+/* ---- multi-role helpers -------------------------------------------------
+   A profile holds one primary `role` plus optional `extra_roles`. The set of
+   roles a person can operate as is the union, de-duplicated, primary first. */
+function rolesOf(p){
+  if(!p) return [];
+  const list=[p.role, ...((p.extra_roles)||[])].filter(Boolean);
+  return [...new Set(list)];
+}
+function hasRole(r){
+  return ((Session && Session.profile && Session.profile.roles) || []).includes(r);
+}
