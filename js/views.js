@@ -78,7 +78,7 @@ const UI = {
   closeSheet(){document.getElementById('scrim').classList.remove('open');document.getElementById('sheet').classList.remove('open')},
 };
 
-const BARE_SCREENS = ['login','signup','signup-done','pending'];
+const BARE_SCREENS = ['login','signup','signup-done','pending','role-choice'];
 
 /* ============================================================ RENDER ====== */
 function render(){
@@ -88,6 +88,7 @@ function render(){
     app.innerHTML = State.screen==='login'       ? viewLogin()
                   : State.screen==='signup'      ? viewSignup()
                   : State.screen==='signup-done' ? viewSignupDone()
+                  : State.screen==='role-choice' ? viewRoleChoice()
                   :                                viewPending();
     return;
   }
@@ -137,8 +138,9 @@ function viewLogin(){
         <div class="field">
           <label for="loginEmail">อีเมล</label>
           <div class="inp">${svg('mail','inp-ic')}
-            <input class="input" id="loginEmail" type="email" autocomplete="username"
-                   inputmode="email" placeholder="name@cmu.ac.th" /></div>
+            <input class="input" id="loginEmail" type="text" autocomplete="username"
+                   inputmode="email" autocapitalize="none" placeholder="ชื่ออีเมล" />
+            <span class="email-suffix">@cmu.ac.th</span></div>
         </div>
         <div class="field">
           <label for="loginPass">รหัสผ่าน</label>
@@ -206,7 +208,7 @@ function signupUnits(){
   // WARDS is empty on this screen in production and cannot be relied on.
   if(Array.isArray(CFG.signupUnits) && CFG.signupUnits.length) return CFG.signupUnits;
   const wards = WARD_USERS.map(w=>w.name);
-  return [...wards, 'ห้องผ่าตัด (OR)', 'ห้องพักฟื้น (RR)', 'หน่วยเปล', 'ประชาสัมพันธ์', 'อื่น ๆ'];
+  return [...wards, 'ทีม OR–RR', 'หน่วยเปล', 'ประชาสัมพันธ์', 'อื่น ๆ'];
 }
 let _suUnit='';
 
@@ -293,9 +295,15 @@ function viewPending(){
   </div>`;
 }
 
+function cmuEmail(value){
+  const raw=(value||'').trim().toLowerCase();
+  if(!raw) return '';
+  return raw.includes('@') ? raw : raw+'@cmu.ac.th';
+}
+
 async function submitLogin(){
   const btn=document.getElementById('loginBtn');
-  const email=(document.getElementById('loginEmail').value||'').trim();
+  const email=cmuEmail(document.getElementById('loginEmail').value);
   const pass=document.getElementById('loginPass').value||'';
   const err=document.getElementById('loginErr');
   err.innerHTML='';
@@ -320,7 +328,37 @@ async function submitLogin(){
       + (ws.detail?`<p class="errdetail" style="margin-top:8px">${esc(ws.detail)}</p>`:'');
     return;
   }
+  if(availableRoles().length > 1){ State.screen='role-choice'; render(); return; }
   await startSession();
+}
+
+function availableRoles(){
+  const p=Session.profile||{};
+  const roles=[p.role].filter(Boolean);
+  if(p.can_work_or && !roles.includes('OR')) roles.push('OR');
+  return roles;
+}
+
+function viewRoleChoice(){
+  const name=(Session.profile&&Session.profile.full_name)||'';
+  return `<div class="login-wrap fade">
+    <div class="brandmark">${brandMark()}</div>
+    <h1>เลือกโหมดการทำงาน</h1>
+    <p class="tag">${name?esc(name)+' · ':''}เลือกตามงานที่กำลังปฏิบัติ</p>
+    <div class="role-list">
+      ${availableRoles().map(role=>{const r=ROLES[role];return `<button class="role-opt" onclick="chooseRole('${role}')">
+        <span class="ro-ic" style="background:${r.tint};color:${r.ink}">${svg(r.icon)}</span>
+        <span><span class="ro-name">${r.name}</span><span class="ro-desc">${r.desc}</span></span>
+        <span class="ro-arrow">${svg('arrowRight')}</span>
+      </button>`}).join('')}
+    </div>
+    <button class="btn btn-soft" style="margin-top:16px" onclick="logout()">${svg('logout')} ออกจากระบบ</button>
+  </div>`;
+}
+
+async function chooseRole(role){
+  if(!availableRoles().includes(role)) return;
+  await startSession(role);
 }
 
 function demoLogin(role){
@@ -331,7 +369,7 @@ function demoLogin(role){
   const first = (Staff[role]||[])[0];
   Session.profile = { id: first ? first.id : 'demo-'+role,
                       full_name: first ? first.name : ROLES[role].name,
-                      role, ward_id: State.wardId, roles:[role] };
+                      role, ward_id: State.wardId };
   Store.audit.unshift(auditRow(role,'LOGIN_SUCCESS','session',null,true));
   State.screen=defaultScreen(role);
   render();
@@ -339,40 +377,27 @@ function demoLogin(role){
 }
 
 /* Applies the signed-in profile to app state, then opens that role's home. */
-async function startSession(){
+async function startSession(roleOverride){
   const p=Session.profile;
-  p.roles = (p.roles && p.roles.length) ? p.roles : rolesOf(p);
-  State.role=p.role;                       // active role defaults to the primary one
+  const activeRole=roleOverride||availableRoles()[0]||p.role;
+  Session.activeRole=activeRole;
+  State.role=activeRole;
   State.wardId=p.ward_id||null;
-  State.screen=defaultScreen(p.role);
+  State.screen=defaultScreen(activeRole);
   if(Store.init) await Store.init();
-  if(hasRole('ADMIN') && Store.refreshAudit) await Store.refreshAudit();
+  if(activeRole==='ADMIN' && Store.refreshAudit) await Store.refreshAudit();
   render();
-  UI.toast(`เข้าสู่ระบบในบทบาท ${ROLES[p.role].name}`,'ok');
-}
-
-/* Switch which held role is currently active. Only changes the workspace the
-   person is looking at — it does NOT grant new powers (RLS already allows every
-   role they hold). The two-nurse rule still compares user id, so switching does
-   not let one person stand in for two different nurses. */
-function switchRole(r){
-  const p=Session.profile;
-  if(!p || !((p.roles||[]).includes(r)) || r===State.role) { UI.closeSheet(); return; }
-  State.role=r;
-  State.wardId=p.ward_id||null;
-  State.screen=defaultScreen(r);
-  if(r==='ADMIN' && Store.refreshAudit) Store.refreshAudit();
-  UI.closeSheet(); render();
-  UI.toast(`สลับเป็นบทบาท ${ROLES[r].name}`,'ok');
+  UI.toast(`เข้าสู่ระบบในบทบาท ${ROLES[activeRole].name}`,'ok');
 }
 
 async function logout(){
   await Auth.signOut();
   Session.profile=null;
+  Session.activeRole=null;
   State.role=null; State.wardId=null; State.screen='login';
   UI.closeSheet(); render();
 }
-function defaultScreen(role){return{PORTER:'home',OR:'or-board',RR:'rr-board',WARD:'ward-board',PR:'pr-lookup',ADMIN:'admin'}[role]}
+function defaultScreen(role){return{PORTER:'home',OR:'or-board',RR:'or-board',WARD:'ward-board',PR:'pr-lookup',ADMIN:'admin'}[role]}
 
 /* ---------------------------- CHROME ------------------------------------- */
 function topbar(){
@@ -390,30 +415,18 @@ function topbar(){
         ${showLive?`<span class="live"><span class="pulse"></span>${Store.online?'อัปเดตเรียลไทม์':'ออฟไลน์'}</span>`:''}
         ${me?`<span class="who">${svg('user','who-ic')}${esc(me)}</span>`:`<span class="sub">${r.name}</span>`}
       </span></div>
-    <span class="role-chip" onclick="openAccountSheet()" style="cursor:pointer"><span class="dot" style="background:${r.color}"></span>${r.name}${(Session.profile&&(Session.profile.roles||[]).length>1)?' ▾':''}</span>
+    <span class="role-chip"><span class="dot" style="background:${r.color}"></span>${r.name}</span>
     <button class="icon-btn" onclick="openAccountSheet()" aria-label="บัญชี">${svg('user')}</button>
   </div></div>`;
 }
 function openAccountSheet(){
   const r=ROLES[State.role];
-  const demo=(typeof DEMO_MODE!=='undefined') && DEMO_MODE;
-  const roles=(Session.profile&&Session.profile.roles)||[State.role];
-  const who=(Session.profile&&Session.profile.full_name)||r.name;
-  const switcher = roles.length>1 ? `
-    <p class="sheet-sub" style="margin:2px 0 8px">สลับบทบาท</p>
-    <div style="display:grid;gap:8px;margin-bottom:14px">
-      ${roles.map(rk=>{const rr=ROLES[rk];const on=rk===State.role;return `
-        <button class="btn ${on?'btn-primary':'btn-soft'}" style="justify-content:flex-start;gap:10px" onclick="switchRole('${rk}')">
-          <span class="ro-ic" style="width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:${rr.tint};color:${rr.ink}">${svg(rr.icon)}</span>
-          ${rr.name}${on?' · กำลังใช้อยู่':''}
-        </button>`;}).join('')}
-    </div>` : `
+  UI.openSheet(`<h3>บัญชีเดโม</h3><p class="sheet-sub">คุณกำลังใช้งานในบทบาท ${r.name}</p>
     <div class="tile" style="margin-bottom:14px;display:flex;gap:12px;align-items:center">
       <span class="ro-ic" style="width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:${r.tint};color:${r.ink}">${svg(r.icon)}</span>
-      <div><div style="font-weight:600">${r.name}</div><div style="font-size:12.5px;color:var(--ink-2)">${r.desc}</div></div></div>`;
-  UI.openSheet(`<h3>บัญชี</h3><p class="sheet-sub">${demo?'โหมดเดโม · ':''}${esc(who)}</p>
-    ${switcher}
-    ${demo?`<button class="btn btn-soft" style="margin-bottom:10px" onclick="toggleOnline()">${Store.online?svg('wifiOff'):svg('wifi')} จำลอง${Store.online?'ขาดการเชื่อมต่อ':'กลับมาออนไลน์'}</button>`:''}
+      <div><div style="font-weight:600">${r.name}</div><div style="font-size:12.5px;color:var(--ink-2)">${r.desc}</div></div></div>
+    ${availableRoles().length>1?`<button class="btn btn-soft" style="margin-bottom:10px" onclick="UI.closeSheet();State.screen='role-choice';render()">${svg('refresh')} สลับโหมดการทำงาน</button>`:''}
+    <button class="btn btn-soft" style="margin-bottom:10px" onclick="toggleOnline()">${Store.online?svg('wifiOff'):svg('wifi')} จำลอง${Store.online?'ขาดการเชื่อมต่อ':'กลับมาออนไลน์'}</button>
     <button class="btn btn-danger" onclick="logout()">${svg('logout')} ออกจากระบบ</button>`);
 }
 function toggleOnline(){Store.online=!Store.online;UI.closeSheet();render();UI.toast(Store.online?'เชื่อมต่อเรียลไทม์แล้ว':'การเชื่อมต่อขาดหาย — จะซิงก์อัตโนมัติเมื่อกลับมาออนไลน์',Store.online?'ok':'err')}
@@ -421,7 +434,7 @@ function toggleOnline(){Store.online=!Store.online;UI.closeSheet();render();UI.t
 function navFor(role){
   const N={
     PORTER:[['home','home','งานรับ-ส่ง'],['history','history','ประวัติ']],
-    OR:[['or-board','scissors','กระดาน'],['dashboard','activity','ภาพรวม'],['history','history','ประวัติ']],
+    OR:[['or-board','scissors','ห้องผ่าตัด'],['rr-board','heart','พักฟื้น'],['dashboard','activity','ภาพรวม'],['history','history','ประวัติ']],
     RR:[['rr-board','heart','พักฟื้น'],['dashboard','activity','ภาพรวม'],['history','history','ประวัติ']],
     WARD:[['ward-board','bed','สถานะ'],['history','history','ประวัติ']],
     PR:[['pr-lookup','search','ค้นหา']],
@@ -799,12 +812,7 @@ function verifyLine(label, v){
 }
 
 /* ---------------------------- APPROVALS ---------------------------------- */
-let _apvRole='', _apvWard='', _apvName='', _apvReject='', _apvExtra=[];
-function toggleApvExtra(r, el){
-  const i=_apvExtra.indexOf(r);
-  if(i>=0){ _apvExtra.splice(i,1); el.style.background='var(--card)'; el.style.color='var(--ink-2)'; el.style.borderColor='var(--line)'; }
-  else    { _apvExtra.push(r);    el.style.background='var(--sage-tint)'; el.style.color='var(--ink)'; el.style.borderColor='var(--sage)'; }
-}
+let _apvRole='', _apvWard='', _apvName='', _apvReject='';
 
 async function loadApprovals(){
   const box=document.getElementById('apvBox'); if(!box) return;
@@ -839,7 +847,7 @@ function apvRow(p){
 }
 
 function openApprove(id, name){
-  _apvRole=''; _apvWard=''; _apvName=name; _apvExtra=[];
+  _apvRole=''; _apvWard=''; _apvName=name;
   UI.openSheet(`
     <h3>อนุมัติเจ้าหน้าที่</h3>
     <p class="sheet-sub">กำหนดบทบาทและหน่วยงานให้ถูกต้อง</p>
@@ -851,17 +859,11 @@ function openApprove(id, name){
       </div>
       <div class="field">
         <label>บทบาท</label>
-        ${dd('apvRole', ['WARD','PORTER','OR','RR','PR','ADMIN'].map(r=>({v:r,label:ROLES[r].name+' ('+r+')'})), '', '— เลือกบทบาท —')}
-      </div>
-      <div class="field">
-        <label>หอผู้ป่วย <span class="help" style="display:inline">(เฉพาะบทบาทหอผู้ป่วย)</span></label>
-        ${dd('apvWard', WARD_USERS.map(w=>({v:w.id,label:w.name})), '', '— เลือกหอผู้ป่วย —')}
+        ${dd('apvRole', ['WARD','PORTER','OR','PR','ADMIN'].map(r=>({v:r,label:ROLES[r].name+' ('+r+')'})), '', '— เลือกบทบาท —')}
       </div>
       <div class="field" style="margin-bottom:0">
-        <label>บทบาทเพิ่มเติม <span class="help" style="display:inline">(เลือกได้หลายอัน · สำหรับคนที่ทำหลายหน้าที่ เช่น OR+RR)</span></label>
-        <div style="display:flex;flex-wrap:wrap;gap:8px">
-          ${['OR','RR','PORTER','WARD','PR','ADMIN'].map(rk=>`<button type="button" data-r="${rk}" onclick="toggleApvExtra('${rk}',this)" style="padding:7px 12px;border:1.5px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink-2);font:inherit;font-size:13px;font-weight:500;cursor:pointer">${ROLES[rk].name}</button>`).join('')}
-        </div>
+        <label>หอผู้ป่วย <span class="help" style="display:inline">(เฉพาะบทบาทหอผู้ป่วย)</span></label>
+        ${dd('apvWard', WARD_USERS.map(w=>({v:w.id,label:w.name})), '', '— เลือกหอผู้ป่วย —')}
       </div>
     </div>
     <button class="btn btn-primary" onclick="commitApprove('${id}')">${svg('check')} อนุมัติ</button>
@@ -872,8 +874,7 @@ async function commitApprove(id){
   if(!_apvName || _apvName.trim().length<3){UI.toast('กรุณากรอกชื่อ-นามสกุลให้ครบ','err');return}
   if(!_apvRole){UI.toast('กรุณาเลือกบทบาท','err');return}
   if(_apvRole==='WARD' && !_apvWard){UI.toast('บทบาทหอผู้ป่วยต้องระบุหอผู้ป่วย','err');return}
-  const extras=[...new Set(_apvExtra)].filter(x=>x!==_apvRole);
-  const res=await Approvals.approve(id,_apvRole,_apvRole==='WARD'?_apvWard:null,_apvName.trim(),extras);
+  const res=await Approvals.approve(id,_apvRole,_apvRole==='WARD'?_apvWard:null,_apvName.trim());
   if(!res.ok){UI.toast(res.msg,'err');return}
   await Staff.load();
   UI.closeSheet(); UI.toast('อนุมัติแล้ว','ok'); adminOpen('approvals');
@@ -1086,7 +1087,7 @@ async function commitPickup(jid){
 let _rChecked=false, _rStaff='';
 function openRRReceiveSheet(j){
   _rChecked=false;
-  { const me=Staff.me(); _rStaff = (me && Staff.optionsFor('RR').some(x=>x.id===me.id)) ? me.id : ''; }
+  { const me=Staff.me(); _rStaff = (me && Staff.optionsFor('OR').some(x=>x.id===me.id)) ? me.id : ''; }
   UI.openSheet(`
     <h3>รับผู้ป่วยเข้าห้องพักฟื้น</h3>
     <p class="sheet-sub">${AV[j.avatar_id].name} · ${j.case_code}${j.or_room?' · '+esc(j.or_room):''}</p>
@@ -1098,7 +1099,7 @@ function openRRReceiveSheet(j){
       </label>
       <div class="field" style="margin:14px 0 0">
         <label>ผู้รับผู้ป่วย (ห้องพักฟื้น)</label>
-        ${dd('rStaff', Staff.optionsFor('RR').map(n=>({v:n.id,label:n.name})), _rStaff, '— เลือกพยาบาล —')}
+        ${dd('rStaff', Staff.optionsFor('OR').map(n=>({v:n.id,label:n.name})), _rStaff, '— เลือกพยาบาล —')}
         <div class="help">เติมชื่อผู้ที่ล็อกอินไว้ให้แล้ว เปลี่ยนได้หากบันทึกแทนคนอื่น</div>
       </div>
     </div>
@@ -1109,7 +1110,7 @@ function openRRReceiveSheet(j){
 async function commitRRReceive(jid){
   if(!_rChecked){UI.toast('กรุณาติ๊กยืนยันว่าตรงกับป้ายข้อมือ','err');return}
   if(!_rStaff){UI.toast('กรุณาเลือกพยาบาลผู้รับ','err');return}
-  const staff = Staff.find('RR', _rStaff);
+  const staff = Staff.find('OR', _rStaff);
   if(!staff){UI.toast('ไม่พบข้อมูลพยาบาลที่เลือก','err');return}
   const res = Store.rrReceive
     ? await Store.rrReceive(jid, staff)
@@ -1196,16 +1197,24 @@ function historyView(){
 /* ---------------------------- AUDIT LOG (admin) -------------------------- */
 const AUDIT_IC={LOGIN_SUCCESS:'user',JOURNEY_CREATED:'plus',EMERGENCY_CREATED:'alert',WAITING_PORTER:'bed',PORTER_TO_OR:'stretcher',IDENTITY_VERIFIED:'idCard',STATUS_CHANGED:'refresh',PUBLIC_STATUS_LOOKUP:'search',QR_REVOKED:'shield',JOURNEY_COMPLETED:'check',INVALID_TRANSITION:'alert',JOURNEY_CANCELLED:'x'};
 function auditView(){
-  if(!DEMO_MODE && Store.refreshAudit && !Store.audit.length) Store.refreshAudit().then(()=>render());
   return `<div class="notice">${svg('shield')}<span>บันทึกการใช้งานทั้งหมด บันทึกด้วยเวลาจากเซิร์ฟเวอร์ ผู้ดูแลระบบไม่สามารถแก้ไขได้</span></div>
-    <div class="section-title">${svg('list')} เหตุการณ์ล่าสุด <span class="count">${Store.audit.length}</span></div>
+    <div class="section-title">${svg('list')} เหตุการณ์ล่าสุด <span class="count">${Store.audit.length}</span>
+      ${!DEMO_MODE?`<button class="btn btn-soft btn-sm" id="auditRefreshBtn" style="margin-left:auto" onclick="refreshAuditView()">${svg('refresh')} รีเฟรช</button>`:''}
+    </div>
     <div class="tile" style="padding:6px 16px">
-    ${Store.audit.slice(0,40).map(a=>`<div class="log-row">
+    ${Store.audit.length?Store.audit.slice(0,40).map(a=>`<div class="log-row">
       <div class="log-ic" style="${a.success?'':'color:var(--clay);background:var(--clay-tint);border-color:transparent'}">${svg(AUDIT_IC[a.action]||'info')}</div>
       <div class="log-main"><div class="log-act">${a.action}${a.success?'':' · ล้มเหลว'}</div>
       <div class="log-meta">${a.actor} · ${a.resource_type}${a.resource_id?' · '+a.resource_id:''}${a.meta&&Object.keys(a.meta).length?' · '+esc(JSON.stringify(a.meta)):''}</div></div>
-      <div class="log-time">${fmtTime(a.at)}</div></div>`).join('')}
+      <div class="log-time">${fmtTime(a.at)}</div></div>`).join(''):`<div class="empty" style="padding:24px 8px"><p>ยังไม่มีบันทึกการใช้งาน</p></div>`}
     </div>`;
+}
+
+async function refreshAuditView(){
+  const btn=document.getElementById('auditRefreshBtn');
+  if(btn){btn.disabled=true;btn.innerHTML=`<span class="spin"></span> กำลังโหลด...`;}
+  await Store.refreshAudit();
+  if(State.screen==='audit') render();
 }
 
 /* ---------------------------- ADMIN -------------------------------------- */
