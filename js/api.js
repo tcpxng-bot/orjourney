@@ -87,6 +87,7 @@ const SupabaseStore = {
   /* ---- initial load + realtime ---- */
   async init(){
     await this.refresh();
+    if(this._channel) await sb.removeChannel(this._channel);
     this._channel = sb.channel('oj-journeys')
       .on('postgres_changes', {event:'*', schema:'public', table:'journeys'}, payload=>{
         this._apply(payload);
@@ -467,7 +468,7 @@ const Auth = {
 
   async loadProfile(){
     const { data, error } = await sb.from('profiles')
-      .select('id, full_name, role, ward_id, is_provisioned, approval_status, reject_reason')
+      .select('id, full_name, role, ward_id, can_work_or, is_provisioned, approval_status, reject_reason')
       .eq('id', Session.user.id).single();
     if(error || !data){
       console.error('[OR Journey] profile load failed:', error);
@@ -510,7 +511,7 @@ const Staff = {
     // full_name during sign-up, so an unapproved name could otherwise appear in
     // the "who confirmed" picker and end up signed against a wristband check.
     const { data, error } = await sb.from('profiles')
-      .select('id, full_name, role').eq('is_active', true).eq('is_provisioned', true);
+      .select('id, full_name, role, can_work_or').eq('is_active', true).eq('is_provisioned', true);
     if(error){
       console.error('[OR Journey] staff list failed:', error);
       this.OR=[]; this.PORTER=[]; this.RR=[];
@@ -521,7 +522,16 @@ const Staff = {
       .filter(p=>p.role===r && p.full_name && p.full_name.trim())
       .map(p=>({id:p.id, name:p.full_name.trim()}))
       .sort((a,b)=>a.name.localeCompare(b.name,'th'));
-    this.OR = by('OR'); this.PORTER = by('PORTER'); this.RR = by('RR');
+    // OR and RR are one operational team. Keep legacy RR profiles visible
+    // during migration, but new approvals should use role OR.
+    const additionalOR = (data||[])
+      .filter(p=>p.can_work_or && p.full_name && p.full_name.trim())
+      .map(p=>({id:p.id, name:p.full_name.trim()}));
+    this.OR = [...by('OR'), ...by('RR'), ...additionalOR]
+      .filter((p,i,a)=>a.findIndex(x=>x.id===p.id)===i)
+      .sort((a,b)=>a.name.localeCompare(b.name,'th'));
+    this.PORTER = by('PORTER');
+    this.RR = this.OR;
 
     // The two-nurse check needs two *different* OR staff to be selectable.
     if(this.OR.length < 2){
@@ -529,10 +539,10 @@ const Staff = {
         msg:'ต้องมีเจ้าหน้าที่ห้องผ่าตัดอย่างน้อย 2 คนที่ตั้งชื่อแล้ว จึงจะยืนยันตัวผู้ป่วย 2 ครั้งได้',
         detail:'พบบัญชี role=OR ที่มี full_name จำนวน ' + this.OR.length + ' คน'};
     }
-    if(!this.PORTER.length || !this.RR.length){
+    if(!this.PORTER.length){
       return {ok:false,
-        msg:'ยังไม่มีเจ้าหน้าที่หน่วยเปลหรือห้องพักฟื้นที่ตั้งชื่อไว้',
-        detail:'PORTER=' + this.PORTER.length + ', RR=' + this.RR.length +
+        msg:'ยังไม่มีเจ้าหน้าที่หน่วยเปลที่ตั้งชื่อไว้',
+        detail:'PORTER=' + this.PORTER.length +
                ' — ต้องตั้ง full_name ในตาราง profiles'};
     }
     return {ok:true};
@@ -549,7 +559,8 @@ const Staff = {
   optionsFor(role){
     const list = (this[role]||[]).slice();
     const me = this.me();
-    if(me && Session.profile.role===role && !list.some(s=>s.id===me.id)) list.unshift(me);
+    const activeRole = Session.activeRole || Session.profile.role;
+    if(me && activeRole===role && !list.some(s=>s.id===me.id)) list.unshift(me);
     return list;
   },
 
@@ -613,9 +624,6 @@ async function loadWorkspace(){
   const ref = await Reference.load();
   if(!ref.ok) return ref;
   const st = await Staff.load();
-  // ADMIN must be able to enter an incomplete workspace so they can approve
-  // accounts and assign the staff roles needed to make it operational.
-  // Clinical roles remain blocked until the staffing rules are satisfied.
   if(!st.ok && (!Session.profile || Session.profile.role !== 'ADMIN')) return st;
   return {ok:true, warning:st.ok ? null : st};
 }
