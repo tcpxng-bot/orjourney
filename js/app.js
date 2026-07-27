@@ -3,7 +3,7 @@
    Order matters: config → constants → mock → api → views → app
    ============================================================================ */
 
-const OJ_BUILD = '2026-07-27a';
+const OJ_BUILD = '2026-07-27b';
 let pendingBootMsg = null;
 
 function fatal(msg, detail){
@@ -40,8 +40,10 @@ async function boot(){
     return;
   }
 
-  // Re-render whenever the data layer changes (Realtime in live mode).
-  Store.sub(()=>{ if(State.screen !== 'login') render(); });
+  // Journey Realtime belongs on operational boards only. Re-rendering static
+  // admin/audit screens for every connection event makes them visibly flicker.
+  const realtimeScreens = ['ward-board','or-board','rr-board','home','dashboard','history'];
+  Store.sub(()=>{ if(realtimeScreens.includes(State.screen)) render(); });
 
   // Keep relative times ("18 นาที") honest on the live boards.
   setInterval(()=>{
@@ -56,7 +58,10 @@ async function boot(){
           State.screen='pending'; render(); return;
         }
         const ws = await loadWorkspace();
-        if(ws.ok){ await startSession(); return; }
+        if(ws.ok){
+          if(availableRoles().length > 1){ State.screen='role-choice'; render(); return; }
+          await startSession(); return;
+        }
         // Session is valid but the workspace can't load — show why, on the
         // login screen, rather than dropping the user into a broken board.
         console.error('[OR Journey] workspace load failed:', ws.msg);
