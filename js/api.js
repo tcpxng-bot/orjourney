@@ -353,10 +353,10 @@ const Approvals = {
     if(error){ console.error('[OR Journey] pending list failed:', error); return []; }
     return data||[];
   },
-  async approve(id, role, wardId, fullName){
+  async approve(id, role, wardId, fullName, extraRoles){
     const me = Session.profile || {};
     const { error } = await sb.from('profiles').update({
-      role, ward_id: wardId||null, full_name: fullName,
+      role, extra_roles: extraRoles||[], ward_id: wardId||null, full_name: fullName,
       is_provisioned:true, approval_status:'APPROVED',
       approved_by: me.id||null, approved_at: isoNow(), updated_at: isoNow(),
     }).eq('id', id);
@@ -427,8 +427,13 @@ const Auth = {
     if(DEMO_MODE) return {ok:false, msg:'โหมดเดโม — ยังไม่ได้ตั้งค่า Supabase'};
     if(CFG.allowSignup === false) return {ok:false, msg:'ระบบปิดการสมัครด้วยตนเอง กรุณาติดต่อผู้ดูแลระบบ'};
     const dom = (CFG.allowedEmailDomains||[]);
-    if(dom.length && !dom.some(d=>email.toLowerCase().endsWith('@'+d.toLowerCase())))
-      return {ok:false, msg:'อนุญาตเฉพาะอีเมลของโรงพยาบาล (' + dom.join(', ') + ')'};
+    const e = email.trim().toLowerCase();
+    // Match the domain itself or any sub-domain of it, so listing 'cmu.ac.th'
+    // also accepts addresses like name@med.cmu.ac.th.
+    const okDomain = d => { d = d.toLowerCase().replace(/^@/,'');
+                            return e.endsWith('@'+d) || e.endsWith('.'+d); };
+    if(dom.length && !dom.some(okDomain))
+      return {ok:false, msg:'อนุญาตเฉพาะอีเมลของหน่วยงาน (' + dom.map(d=>'@'+d).join(' หรือ ') + ')'};
 
     const { error } = await sb.auth.signUp({
       email, password,
@@ -462,12 +467,13 @@ const Auth = {
 
   async loadProfile(){
     const { data, error } = await sb.from('profiles')
-      .select('id, full_name, role, ward_id, is_provisioned, approval_status, reject_reason')
+      .select('id, full_name, role, ward_id, is_provisioned, approval_status, reject_reason, extra_roles')
       .eq('id', Session.user.id).single();
     if(error || !data){
       console.error('[OR Journey] profile load failed:', error);
       return {ok:false, msg:'ไม่พบโปรไฟล์ผู้ใช้ — กรุณาติดต่อผู้ดูแลระบบ'};
     }
+    data.roles = rolesOf(data);
     Session.profile = data;
     return {ok:true};
   },
