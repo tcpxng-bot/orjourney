@@ -115,32 +115,74 @@ function screenBody(){
 /* ---------------------------- LOGIN -------------------------------------- */
 function viewLogin(){
   const demo = (typeof DEMO_MODE!=='undefined') && DEMO_MODE;
-  return `<div class="login-wrap fade">
-    <div class="brandmark">${avatarSVG('cloud')}</div>
-    <h1>OR Journey</h1>
-    <p class="tag">ติดตามการเดินทางของผู้ป่วยในห้องผ่าตัด อย่างเป็นส่วนตัวและใจเย็น</p>
+  return `<div class="auth">
+    <aside class="auth-brand">
+      <div class="mark-lg">${brandMark()}</div>
+      <h1 class="wordmark"><span>OR</span> <span class="jr">Journey</span></h1>
+      <p class="wordmark-sub">ทุกการส่งต่อ เชื่อมถึงกันอย่างราบรื่น</p>
+      <p class="wordmark-blurb">ติดตามสถานะการเดินทางของผู้ป่วยระหว่างหอผู้ป่วย ห้องผ่าตัด
+        และห้องพักฟื้นแบบเรียลไทม์ โดยไม่เก็บข้อมูลที่ระบุตัวผู้ป่วย</p>
+      ${flowStrip()}
+    </aside>
 
-    ${demo ? demoRolePicker() : `
-    <div class="tile">
-      <div class="field">
-        <label for="loginEmail">อีเมล</label>
-        <input class="input" id="loginEmail" type="email" autocomplete="username"
-               inputmode="email" placeholder="name@hospital.go.th" />
-      </div>
-      <div class="field">
-        <label for="loginPass">รหัสผ่าน</label>
-        <input class="input" id="loginPass" type="password" autocomplete="current-password"
-               placeholder="••••••••" onkeydown="if(event.key==='Enter')submitLogin()" />
-      </div>
-      <div id="loginErr"></div>
-      <button class="btn btn-accent" id="loginBtn" onclick="submitLogin()">${svg('logout')} เข้าสู่ระบบ</button>
-      <p class="help" style="text-align:center;margin-top:12px">บทบาทและหอผู้ป่วยกำหนดจากบัญชีของคุณ<br>หากเข้าไม่ได้ กรุณาติดต่อผู้ดูแลระบบ</p>
-    </div>
-    ${CFG.allowSignup!==false?`<button class="btn btn-soft" style="margin-top:12px" onclick="go('signup')">${svg('plus')} สมัครใช้งาน (สำหรับเจ้าหน้าที่ใหม่)</button>`:''}`}
+    <main class="auth-main">
+      <div class="auth-card">
+        <div class="mark-sm">${brandMark()}</div>
+        <h1 class="wordmark-m"><span>OR</span> <span class="jr">Journey</span></h1>
+        <p class="wordmark-m-sub">ทุกการส่งต่อ เชื่อมถึงกันอย่างราบรื่น</p>
+        <h2>เข้าสู่ระบบ</h2>
+        <p class="auth-sub">สำหรับเจ้าหน้าที่ของโรงพยาบาล</p>
 
-    <div class="notice" style="margin-top:26px">${svg('shield')}<span>ระบบนี้ไม่เก็บชื่อผู้ป่วย HN เลขบัตรประชาชน การวินิจฉัย หรือชื่อหัตถการ ข้อมูลทั้งหมดเป็นเพียงสถานะกระบวนการเท่านั้น</span></div>
-    <p class="buildstamp">build ${typeof OJ_BUILD!=='undefined'?OJ_BUILD:'—'}${DEMO_MODE?' · demo':''}</p>
+        ${demo ? demoRolePicker() : `
+        <div class="field">
+          <label for="loginEmail">อีเมล</label>
+          <div class="inp">${svg('mail','inp-ic')}
+            <input class="input" id="loginEmail" type="email" autocomplete="username"
+                   inputmode="email" placeholder="name@cmu.ac.th" /></div>
+        </div>
+        <div class="field">
+          <label for="loginPass">รหัสผ่าน</label>
+          <div class="inp">${svg('lock','inp-ic')}
+            <input class="input" id="loginPass" type="password" autocomplete="current-password"
+                   placeholder="••••••••" onkeydown="if(event.key==='Enter')submitLogin()" /></div>
+        </div>
+        <div id="loginErr"></div>
+        <button class="btn btn-accent" id="loginBtn" onclick="submitLogin()">${svg('logout')} เข้าสู่ระบบ</button>
+
+        ${CFG.allowSignup!==false?`
+          <div class="or-sep"><i></i>หรือ<i></i></div>
+          <button class="btn btn-soft" onclick="go('signup')">${svg('plus')} สมัครใช้งาน (สำหรับเจ้าหน้าที่ใหม่)</button>`:''}
+
+        ${helpLine('ลืมรหัสผ่าน หรือเข้าใช้งานไม่ได้')}
+        `}
+
+        <div class="notice" style="margin-top:22px">${svg('shield')}<span>ระบบนี้ไม่เก็บชื่อผู้ป่วย HN เลขบัตรประชาชน การวินิจฉัย หรือชื่อหัตถการ ข้อมูลทั้งหมดเป็นเพียงสถานะกระบวนการเท่านั้น</span></div>
+        <p class="buildstamp">build ${typeof OJ_BUILD!=='undefined'?OJ_BUILD:'—'}${DEMO_MODE?' · demo':''}</p>
+      </div>
+    </main>
   </div>`;
+}
+
+/* Password resets need SMTP, which most sites will not have on day one. A named
+   human on LINE beats a reset link that silently fails. */
+function helpLine(label){
+  const url=CFG.supportLineUrl, tag=CFG.supportLineLabel||'LINE';
+  if(!url) return '';
+  return `<a class="help-line" href="${esc(url)}" target="_blank" rel="noopener">
+    <span class="hl-ic">${svg('message')}</span>
+    <span class="hl-tx"><b>${esc(label)}</b><span>ติดต่อผู้ดูแลระบบทาง LINE · ${esc(tag)}</span></span>
+    ${svg('arrowRight','hl-go')}</a>`;
+}
+
+/* The four stages, shown before sign-in so a first-time user understands the
+   product without being told. */
+function flowStrip(){
+  const steps=[['home','หอผู้ป่วย','สร้าง Journey'],['stretcher','หน่วยเปล','นำส่ง'],
+               ['scissors','ห้องผ่าตัด','ยืนยัน 2 ชั้น'],['bed','ส่งกลับ','ถึงหอผู้ป่วย']];
+  return `<div class="flow"><div class="flow-line"></div>
+    ${steps.map(([ic,lb,sub])=>`<div class="flow-step">
+      <span class="pin">${svg(ic)}</span>
+      <span class="lb">${lb}</span><span class="sub">${sub}</span></div>`).join('')}</div>`;
 }
 
 /* Demo mode only: pick a role without credentials. */
@@ -160,7 +202,11 @@ function demoRolePicker(){
 /* Units the applicant can claim. Chosen from a list rather than typed so the
    approval screen can compare like with like. */
 function signupUnits(){
-  return [...WARD_USERS.map(w=>w.name), 'ห้องผ่าตัด (OR)', 'ห้องพักฟื้น (RR)', 'หน่วยเปล', 'ประชาสัมพันธ์', 'อื่น ๆ'];
+  // Configured list first: the ward table is not readable before login, so
+  // WARDS is empty on this screen in production and cannot be relied on.
+  if(Array.isArray(CFG.signupUnits) && CFG.signupUnits.length) return CFG.signupUnits;
+  const wards = WARD_USERS.map(w=>w.name);
+  return [...wards, 'ห้องผ่าตัด (OR)', 'ห้องพักฟื้น (RR)', 'หน่วยเปล', 'ประชาสัมพันธ์', 'อื่น ๆ'];
 }
 let _suUnit='';
 
@@ -168,6 +214,7 @@ function viewSignup(){
   const dom=(CFG.allowedEmailDomains||[]);
   return `<div class="login-wrap fade">
     <button class="btn-ghost" onclick="go('login')" style="align-self:flex-start;margin-bottom:6px">${svg('arrowLeft')} กลับ</button>
+    <div class="mark-sm" style="display:grid;margin-bottom:10px">${brandMark()}</div>
     <h1 style="font-size:26px">สมัครใช้งาน</h1>
     <p class="tag">สำหรับเจ้าหน้าที่ของโรงพยาบาลเท่านั้น</p>
     <div class="notice" style="margin-bottom:16px">${svg('info')}<span>เมื่อสมัครแล้ว บัญชีจะยัง<b>ใช้งานไม่ได้</b>จนกว่าผู้ดูแลระบบจะตรวจสอบและอนุมัติ พร้อมกำหนดบทบาทให้</span></div>
@@ -218,7 +265,7 @@ async function submitSignup(){
 
 function viewSignupDone(){
   return `<div class="login-wrap fade">
-    <div class="brandmark">${svg('checkCircle')}</div>
+    <div class="brandmark ok">${svg('checkCircle')}</div>
     <h1>ส่งคำขอแล้ว</h1>
     <p class="tag">ผู้ดูแลระบบจะตรวจสอบและอนุมัติบัญชีของคุณ</p>
     <div class="tile"><p class="help" style="margin:0">เมื่อได้รับอนุมัติแล้ว คุณจะเข้าสู่ระบบด้วยอีเมลและรหัสผ่านที่ตั้งไว้ได้ทันที<br><br>
@@ -241,6 +288,7 @@ function viewPending(){
         <div class="log-meta">${esc((Session.user&&Session.user.email)||'')}</div></div></div>
       ${rejected&&p.reject_reason?`<div class="notice emerg-notice" style="margin-top:10px">${svg('info')}<span>เหตุผล: ${esc(p.reject_reason)}</span></div>`:''}
     </div>
+    ${helpLine('สอบถามความคืบหน้าการอนุมัติ')}
     <button class="btn btn-soft" style="margin-top:16px" onclick="logout()">${svg('logout')} ออกจากระบบ</button>
   </div>`;
 }
@@ -316,9 +364,16 @@ function topbar(){
     'or-board':'กระดานห้องผ่าตัด','rr-board':'ห้องพักฟื้น','ward-board':'สถานะหอผู้ป่วย','pr-lookup':'ตรวจสอบสถานะ',history:'ประวัติ',audit:'บันทึกการใช้งาน',admin:'ผู้ดูแลระบบ'};
   const r=ROLES[State.role];
   const showLive = ['ward-board','or-board','rr-board','home','dashboard'].includes(State.screen);
+  // Always show WHO is signed in. On a shared device a stale session would
+  // otherwise silently sign the next person's wristband checks with the
+  // previous user's name — the header is the cheapest place to notice that.
+  const me = (Session.profile && Session.profile.full_name) || '';
   return `<div class="topbar"><div class="topbar-in">
-    <div style="flex:1"><h1>${titles[State.screen]||'OR Journey'}</h1>
-      ${showLive?`<span class="live"><span class="pulse"></span>${Store.online?'อัปเดตเรียลไทม์':'ออฟไลน์'}</span>`:`<span class="sub">${r.name}</span>`}</div>
+    <div style="flex:1;min-width:0"><h1>${titles[State.screen]||'OR Journey'}</h1>
+      <span class="sub-line">
+        ${showLive?`<span class="live"><span class="pulse"></span>${Store.online?'อัปเดตเรียลไทม์':'ออฟไลน์'}</span>`:''}
+        ${me?`<span class="who">${svg('user','who-ic')}${esc(me)}</span>`:`<span class="sub">${r.name}</span>`}
+      </span></div>
     <span class="role-chip"><span class="dot" style="background:${r.color}"></span>${r.name}</span>
     <button class="icon-btn" onclick="openAccountSheet()" aria-label="บัญชี">${svg('user')}</button>
   </div></div>`;
@@ -355,7 +410,7 @@ function sidebar(){
   if(!State.role)return'';
   const items=navFor(State.role);const r=ROLES[State.role];
   return `<aside class="sidebar">
-    <div class="sb-brand"><span class="bm">${svg('route')}</span><span class="nm">OR Journey</span></div>
+    <div class="sb-brand"><span class="bm">${brandMark()}</span><span class="nm">OR Journey</span></div>
     ${items.map(([sc,ic,lb])=>`<button class="sb-item ${State.screen===sc?'active':''}" onclick="go('${sc}')">${svg(ic)}${lb}</button>`).join('')}
     <div class="sb-foot">
       <div class="sb-item" style="cursor:default"><span class="ro-ic" style="width:24px;height:24px;border-radius:8px;display:grid;place-items:center;background:${r.tint};color:${r.ink}">${svg(r.icon)}</span>${r.name}</div>

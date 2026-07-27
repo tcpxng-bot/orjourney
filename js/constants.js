@@ -1,5 +1,26 @@
 /* OR Journey — shared constants: icons, avatars, statuses, roles, transitions */
 
+/* Brand mark: the winding route from ward to theatre and back. Rendered at two
+   fidelities because a gradient turns to mud below ~20px — `brandMark('flat')`
+   is the single-colour version used for small sizes and for print. */
+function brandMark(variant){
+  if(variant==='flat') return `<svg class="mark" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+    <path d="M15 13h9a6.5 6.5 0 0 1 0 13h-6a6.5 6.5 0 0 0 0 13h9" stroke="currentColor"
+          stroke-width="5.4" stroke-linecap="round"/>
+    <circle cx="14.5" cy="13" r="5" fill="currentColor"/>
+    <circle cx="33" cy="39" r="6" fill="currentColor"/></svg>`;
+  const id='bg'+Math.random().toString(36).slice(2,7);
+  return `<svg class="mark" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7DBCF6"/><stop offset="55%" stop-color="#8FC9CF"/>
+      <stop offset="100%" stop-color="#7BC49B"/></linearGradient></defs>
+    <path d="M15 13h9a6.5 6.5 0 0 1 0 13h-6a6.5 6.5 0 0 0 0 13h9" stroke="url(#${id})"
+          stroke-width="5" stroke-linecap="round"/>
+    <circle cx="14.5" cy="13" r="5" fill="#fff" stroke="#7DBCF6" stroke-width="3.5"/>
+    <circle cx="33" cy="39" r="6.2" fill="#7BC49B"/>
+    <circle cx="33" cy="39" r="2.2" fill="#fff"/></svg>`;
+}
+
 /* Reference data. Populated by Reference.load() at boot: from the database in
    live mode (real uuid ids), from DEMO_* fallbacks in demo mode. Declared with
    `let` because the live rows replace them entirely. */
@@ -30,6 +51,9 @@ const IC = {
   stretcher:'<path d="M2 11h20"/><path d="M5 11V9h4"/><path d="M6 11v3M18 11v3"/><circle cx="6" cy="16.5" r="1.6"/><circle cx="18" cy="16.5" r="1.6"/>',
   wristband:'<path d="M8 4h8v3a4 4 0 0 1-4 4 4 4 0 0 1-4-4Z"/><path d="M8 20h8v-3a4 4 0 0 0-4-4 4 4 0 0 0-4 4Z"/><path d="M10 8h4"/>',
   shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>',
+  mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/>',
+  lock:'<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+  message:'<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4c-1 0-2-.15-2.9-.42L3 21l1.6-4.3A8.1 8.1 0 0 1 3 11.5C3 6.8 7 3 12 3s9 3.8 9 8.5Z"/>',
   printer:'<path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7" rx="1"/>',
   idCard:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.5-1.5 1.7-2 3-2s2.5.5 3 2"/><path d="M15 10h4M15 13h4"/>',
   userCheck:'<circle cx="9" cy="8" r="3.2"/><path d="M4 20c.6-3 2.7-4.5 5-4.5s4.4 1.5 5 4.5"/><path d="m16 12 2 2 3.5-3.5"/>',
