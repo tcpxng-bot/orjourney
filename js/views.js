@@ -331,7 +331,7 @@ function demoLogin(role){
   const first = (Staff[role]||[])[0];
   Session.profile = { id: first ? first.id : 'demo-'+role,
                       full_name: first ? first.name : ROLES[role].name,
-                      role, ward_id: State.wardId };
+                      role, ward_id: State.wardId, roles:[role] };
   Store.audit.unshift(auditRow(role,'LOGIN_SUCCESS','session',null,true));
   State.screen=defaultScreen(role);
   render();
@@ -341,13 +341,29 @@ function demoLogin(role){
 /* Applies the signed-in profile to app state, then opens that role's home. */
 async function startSession(){
   const p=Session.profile;
-  State.role=p.role;
+  p.roles = (p.roles && p.roles.length) ? p.roles : rolesOf(p);
+  State.role=p.role;                       // active role defaults to the primary one
   State.wardId=p.ward_id||null;
   State.screen=defaultScreen(p.role);
   if(Store.init) await Store.init();
-  if(p.role==='ADMIN' && Store.refreshAudit) await Store.refreshAudit();
+  if(hasRole('ADMIN') && Store.refreshAudit) await Store.refreshAudit();
   render();
   UI.toast(`เข้าสู่ระบบในบทบาท ${ROLES[p.role].name}`,'ok');
+}
+
+/* Switch which held role is currently active. Only changes the workspace the
+   person is looking at — it does NOT grant new powers (RLS already allows every
+   role they hold). The two-nurse rule still compares user id, so switching does
+   not let one person stand in for two different nurses. */
+function switchRole(r){
+  const p=Session.profile;
+  if(!p || !((p.roles||[]).includes(r)) || r===State.role) { UI.closeSheet(); return; }
+  State.role=r;
+  State.wardId=p.ward_id||null;
+  State.screen=defaultScreen(r);
+  if(r==='ADMIN' && Store.refreshAudit) Store.refreshAudit();
+  UI.closeSheet(); render();
+  UI.toast(`สลับเป็นบทบาท ${ROLES[r].name}`,'ok');
 }
 
 async function logout(){
@@ -374,17 +390,30 @@ function topbar(){
         ${showLive?`<span class="live"><span class="pulse"></span>${Store.online?'อัปเดตเรียลไทม์':'ออฟไลน์'}</span>`:''}
         ${me?`<span class="who">${svg('user','who-ic')}${esc(me)}</span>`:`<span class="sub">${r.name}</span>`}
       </span></div>
-    <span class="role-chip"><span class="dot" style="background:${r.color}"></span>${r.name}</span>
+    <span class="role-chip" onclick="openAccountSheet()" style="cursor:pointer"><span class="dot" style="background:${r.color}"></span>${r.name}${(Session.profile&&(Session.profile.roles||[]).length>1)?' ▾':''}</span>
     <button class="icon-btn" onclick="openAccountSheet()" aria-label="บัญชี">${svg('user')}</button>
   </div></div>`;
 }
 function openAccountSheet(){
   const r=ROLES[State.role];
-  UI.openSheet(`<h3>บัญชีเดโม</h3><p class="sheet-sub">คุณกำลังใช้งานในบทบาท ${r.name}</p>
+  const demo=(typeof DEMO_MODE!=='undefined') && DEMO_MODE;
+  const roles=(Session.profile&&Session.profile.roles)||[State.role];
+  const who=(Session.profile&&Session.profile.full_name)||r.name;
+  const switcher = roles.length>1 ? `
+    <p class="sheet-sub" style="margin:2px 0 8px">สลับบทบาท</p>
+    <div style="display:grid;gap:8px;margin-bottom:14px">
+      ${roles.map(rk=>{const rr=ROLES[rk];const on=rk===State.role;return `
+        <button class="btn ${on?'btn-primary':'btn-soft'}" style="justify-content:flex-start;gap:10px" onclick="switchRole('${rk}')">
+          <span class="ro-ic" style="width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:${rr.tint};color:${rr.ink}">${svg(rr.icon)}</span>
+          ${rr.name}${on?' · กำลังใช้อยู่':''}
+        </button>`;}).join('')}
+    </div>` : `
     <div class="tile" style="margin-bottom:14px;display:flex;gap:12px;align-items:center">
       <span class="ro-ic" style="width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:${r.tint};color:${r.ink}">${svg(r.icon)}</span>
-      <div><div style="font-weight:600">${r.name}</div><div style="font-size:12.5px;color:var(--ink-2)">${r.desc}</div></div></div>
-    <button class="btn btn-soft" style="margin-bottom:10px" onclick="toggleOnline()">${Store.online?svg('wifiOff'):svg('wifi')} จำลอง${Store.online?'ขาดการเชื่อมต่อ':'กลับมาออนไลน์'}</button>
+      <div><div style="font-weight:600">${r.name}</div><div style="font-size:12.5px;color:var(--ink-2)">${r.desc}</div></div></div>`;
+  UI.openSheet(`<h3>บัญชี</h3><p class="sheet-sub">${demo?'โหมดเดโม · ':''}${esc(who)}</p>
+    ${switcher}
+    ${demo?`<button class="btn btn-soft" style="margin-bottom:10px" onclick="toggleOnline()">${Store.online?svg('wifiOff'):svg('wifi')} จำลอง${Store.online?'ขาดการเชื่อมต่อ':'กลับมาออนไลน์'}</button>`:''}
     <button class="btn btn-danger" onclick="logout()">${svg('logout')} ออกจากระบบ</button>`);
 }
 function toggleOnline(){Store.online=!Store.online;UI.closeSheet();render();UI.toast(Store.online?'เชื่อมต่อเรียลไทม์แล้ว':'การเชื่อมต่อขาดหาย — จะซิงก์อัตโนมัติเมื่อกลับมาออนไลน์',Store.online?'ok':'err')}
@@ -770,7 +799,12 @@ function verifyLine(label, v){
 }
 
 /* ---------------------------- APPROVALS ---------------------------------- */
-let _apvRole='', _apvWard='', _apvName='', _apvReject='';
+let _apvRole='', _apvWard='', _apvName='', _apvReject='', _apvExtra=[];
+function toggleApvExtra(r, el){
+  const i=_apvExtra.indexOf(r);
+  if(i>=0){ _apvExtra.splice(i,1); el.style.background='var(--card)'; el.style.color='var(--ink-2)'; el.style.borderColor='var(--line)'; }
+  else    { _apvExtra.push(r);    el.style.background='var(--sage-tint)'; el.style.color='var(--ink)'; el.style.borderColor='var(--sage)'; }
+}
 
 async function loadApprovals(){
   const box=document.getElementById('apvBox'); if(!box) return;
@@ -805,7 +839,7 @@ function apvRow(p){
 }
 
 function openApprove(id, name){
-  _apvRole=''; _apvWard=''; _apvName=name;
+  _apvRole=''; _apvWard=''; _apvName=name; _apvExtra=[];
   UI.openSheet(`
     <h3>อนุมัติเจ้าหน้าที่</h3>
     <p class="sheet-sub">กำหนดบทบาทและหน่วยงานให้ถูกต้อง</p>
@@ -819,9 +853,15 @@ function openApprove(id, name){
         <label>บทบาท</label>
         ${dd('apvRole', ['WARD','PORTER','OR','RR','PR','ADMIN'].map(r=>({v:r,label:ROLES[r].name+' ('+r+')'})), '', '— เลือกบทบาท —')}
       </div>
-      <div class="field" style="margin-bottom:0">
+      <div class="field">
         <label>หอผู้ป่วย <span class="help" style="display:inline">(เฉพาะบทบาทหอผู้ป่วย)</span></label>
         ${dd('apvWard', WARD_USERS.map(w=>({v:w.id,label:w.name})), '', '— เลือกหอผู้ป่วย —')}
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>บทบาทเพิ่มเติม <span class="help" style="display:inline">(เลือกได้หลายอัน · สำหรับคนที่ทำหลายหน้าที่ เช่น OR+RR)</span></label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${['OR','RR','PORTER','WARD','PR','ADMIN'].map(rk=>`<button type="button" data-r="${rk}" onclick="toggleApvExtra('${rk}',this)" style="padding:7px 12px;border:1.5px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink-2);font:inherit;font-size:13px;font-weight:500;cursor:pointer">${ROLES[rk].name}</button>`).join('')}
+        </div>
       </div>
     </div>
     <button class="btn btn-primary" onclick="commitApprove('${id}')">${svg('check')} อนุมัติ</button>
@@ -832,7 +872,8 @@ async function commitApprove(id){
   if(!_apvName || _apvName.trim().length<3){UI.toast('กรุณากรอกชื่อ-นามสกุลให้ครบ','err');return}
   if(!_apvRole){UI.toast('กรุณาเลือกบทบาท','err');return}
   if(_apvRole==='WARD' && !_apvWard){UI.toast('บทบาทหอผู้ป่วยต้องระบุหอผู้ป่วย','err');return}
-  const res=await Approvals.approve(id,_apvRole,_apvRole==='WARD'?_apvWard:null,_apvName.trim());
+  const extras=[...new Set(_apvExtra)].filter(x=>x!==_apvRole);
+  const res=await Approvals.approve(id,_apvRole,_apvRole==='WARD'?_apvWard:null,_apvName.trim(),extras);
   if(!res.ok){UI.toast(res.msg,'err');return}
   await Staff.load();
   UI.closeSheet(); UI.toast('อนุมัติแล้ว','ok'); adminOpen('approvals');
