@@ -1,4 +1,4 @@
-/* ============================================================================
+  /* ============================================================================
    OR Journey — configuration
    ----------------------------------------------------------------------------
    1. Open your Supabase project → Settings → API
@@ -18,6 +18,13 @@ window.OJ_CONFIG = {
   supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNndmlxc2Vxd25lb3dqdHFza215Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3MjUzNTEsImV4cCI6MjEwMDMwMTM1MX0.O8XvXl0Ydgw98fpCi-0omYapnBxiHSiDU9roA3xJo74',   // e.g. 'eyJhbGciOi...'
   // Force demo mode even when credentials are present (useful for training).
   forceDemo: false,
+
+  // ---- Support contact -----------------------------------------------------
+  // Shown where a password reset would normally go. Sending reset mail needs a
+  // configured SMTP server; until then a real person on LINE is more reliable
+  // than a link that quietly fails.
+  supportLineUrl: 'https://line.me/R/ti/p/@yourhospital',
+  supportLineLabel: '@yourhospital',
 
   // ---- Self-registration --------------------------------------------------
   // Staff may create their own account, but it does nothing until an
@@ -44,8 +51,12 @@ window.OJ_CONFIG = {
     'อื่น ๆ',
   ],
 
-  // Only addresses on these domains may register. This is a convenience filter
+  // Only addresses on these domains may register. Sub-domains are accepted too,
+  // so 'cmu.ac.th' also allows name@med.cmu.ac.th. This is a convenience filter
   // checked in the browser, NOT a security control — the real gate is admin
   // approval. Leave the list empty to accept any address.
-  allowedEmailDomains: ['hospital.go.th'],
+  //
+  // Note: this applies to SELF-REGISTRATION only. Accounts an administrator
+  // creates in Supabase (such as shared ward logins) are not affected.
+  allowedEmailDomains: ['cmu.ac.th'],
 };
