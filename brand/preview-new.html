@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OR Journey · ตัวอย่างแนวใหม่</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root{
+  /* palette from the reference */
+  --sky-1:#B9DFF5; --sky-2:#7DBCF6;
+  --leaf-1:#A9C8A2; --leaf-2:#7BC49B;
+  --wash:#F3F7F3;  --wash-2:#F8FAF8;
+  --ink:#2E3A3A;   --ink-2:#6B7D6B;  --ink-3:#98A69A;
+  --line:#E4EDE6;  --card:#FFFFFF;
+  --r:14px; --r-lg:22px; --r-xl:30px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--wash-2);color:var(--ink);
+     font-family:'Sarabun',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+h1,h2,.display{font-family:'Prompt',sans-serif}
+
+.page{min-height:100dvh;display:grid;grid-template-columns:1.15fr .85fr}
+@media(max-width:900px){.page{grid-template-columns:1fr}}
+
+/* ---------------- left: brand + the flow it describes ---------------- */
+.brand-side{
+  position:relative;overflow:hidden;padding:56px 48px;
+  display:flex;flex-direction:column;justify-content:center;
+  background:linear-gradient(160deg,#EAF4FB 0%,var(--wash) 55%,#E6F2EA 100%);
+}
+.brand-side::after{ /* soft horizon, kept very quiet */
+  content:'';position:absolute;left:-10%;right:-10%;bottom:-18%;height:52%;
+  background:radial-gradient(60% 100% at 50% 100%,rgba(123,196,155,.20),transparent 70%);
+  pointer-events:none;
+}
+.mark-lg{width:104px;height:104px;border-radius:26px;background:var(--card);
+  display:grid;place-items:center;box-shadow:0 10px 28px rgba(46,58,58,.09);margin-bottom:26px}
+.wordmark{font-size:46px;font-weight:600;letter-spacing:-.02em;line-height:1.1;margin:0}
+.wordmark .or{color:var(--ink)}
+.wordmark .jr{color:var(--leaf-2)}
+.tagline{font-size:17px;color:var(--ink-2);margin:10px 0 0;font-weight:500}
+.rule{display:flex;align-items:center;gap:14px;margin:26px 0 18px;max-width:420px}
+.rule i{flex:1;height:1px;background:var(--line)}
+.blurb{font-size:14.5px;line-height:1.75;color:var(--ink-2);margin:0;max-width:40ch}
+
+/* the journey strip — explains the product, not decoration */
+.flow{display:flex;align-items:flex-start;gap:0;margin-top:44px;position:relative;max-width:480px}
+.flow-step{flex:1;text-align:center;position:relative}
+.flow-step .pin{width:52px;height:52px;border-radius:50%;margin:0 auto 10px;
+  display:grid;place-items:center;color:#fff;position:relative;z-index:2;
+  box-shadow:0 4px 12px rgba(46,58,58,.13)}
+.flow-step:nth-child(1) .pin{background:linear-gradient(150deg,var(--sky-1),var(--sky-2))}
+.flow-step:nth-child(2) .pin{background:linear-gradient(150deg,var(--sky-2),#8FC9CF)}
+.flow-step:nth-child(3) .pin{background:linear-gradient(150deg,#8FC9CF,var(--leaf-2))}
+.flow-step:nth-child(4) .pin{background:linear-gradient(150deg,var(--leaf-2),var(--leaf-1))}
+.flow-step .lb{font-size:11.5px;font-weight:600;letter-spacing:.06em;color:var(--ink-2)}
+.flow-step .sub{font-size:11px;color:var(--ink-3);margin-top:2px}
+.flow-line{position:absolute;top:26px;left:12%;right:12%;height:2px;
+  background:linear-gradient(90deg,var(--sky-2),#8FC9CF,var(--leaf-2));opacity:.35;z-index:1}
+
+/* ---------------- right: the form ---------------- */
+.form-side{display:grid;place-items:center;padding:40px 32px;background:var(--wash-2)}
+.card{width:100%;max-width:400px;background:var(--card);border:1px solid var(--line);
+      border-radius:var(--r-xl);padding:34px 30px;box-shadow:0 6px 24px rgba(46,58,58,.05)}
+.card h2{font-size:26px;font-weight:600;text-align:center;margin:0 0 6px}
+.card .sub{text-align:center;color:var(--ink-2);font-size:14px;margin:0 0 26px}
+.field{margin-bottom:18px}
+.field label{display:block;font-size:13.5px;font-weight:600;margin-bottom:7px}
+.inp{position:relative;display:flex;align-items:center}
+.inp svg{position:absolute;left:14px;color:var(--ink-3);pointer-events:none}
+.inp input{width:100%;padding:14px 14px 14px 44px;border-radius:var(--r);
+  border:1.5px solid var(--line);background:var(--wash-2);font:inherit;font-size:15px;
+  color:var(--ink);min-height:52px;transition:border-color .15s,background .15s}
+.inp input:focus{outline:none;border-color:var(--leaf-2);background:var(--card)}
+.inp input::placeholder{color:var(--ink-3)}
+.row-between{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 22px}
+.chk{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--ink-2);cursor:pointer}
+.chk .box{width:20px;height:20px;border-radius:6px;background:var(--leaf-2);
+  display:grid;place-items:center;color:#fff;flex-shrink:0}
+.link{font-size:13.5px;color:var(--leaf-2);font-weight:600;text-decoration:none}
+.btn{width:100%;min-height:54px;border-radius:var(--r);border:0;font:inherit;font-size:16px;
+  font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px}
+.btn-primary{background:#5FA97D;color:#fff}
+.btn-ghost{background:var(--card);color:var(--ink);border:1.5px solid var(--line);margin-top:0}
+.or-sep{display:flex;align-items:center;gap:14px;margin:20px 0;color:var(--ink-3);font-size:13px}
+.or-sep i{flex:1;height:1px;background:var(--line)}
+.notice{display:flex;gap:11px;background:#F1F7FC;border:1px solid #DCEBF6;border-radius:var(--r);
+  padding:13px 15px;font-size:12.5px;line-height:1.65;color:#4C6472;margin-top:24px}
+.notice svg{flex-shrink:0;margin-top:1px;color:#7DA8C4}
+
+/* ---------------- small-size proof ---------------- */
+.proof{background:var(--card);border-top:1px solid var(--line);padding:26px 32px;
+  display:flex;align-items:center;gap:28px;flex-wrap:wrap;justify-content:center}
+.proof .cell{text-align:center}
+.proof .cap{font-size:10.5px;color:var(--ink-3);margin-top:6px}
+.appicon{width:60px;height:60px;border-radius:14px;background:var(--card);
+  border:1px solid var(--line);display:grid;place-items:center}
+</style>
+</head>
+<body>
+
+<!-- ===================== logo, defined once ===================== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="jg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7DBCF6"/><stop offset="55%" stop-color="#8FC9CF"/>
+      <stop offset="100%" stop-color="#7BC49B"/>
+    </linearGradient>
+  </defs>
+  <symbol id="mark" viewBox="0 0 48 48">
+    <!-- the winding route: start ring, S-bend, destination pin -->
+    <path d="M15 13h9a6.5 6.5 0 0 1 0 13h-6a6.5 6.5 0 0 0 0 13h9"
+          fill="none" stroke="url(#jg)" stroke-width="4.6" stroke-linecap="round"/>
+    <circle cx="14.5" cy="13" r="4.6" fill="#fff" stroke="#7DBCF6" stroke-width="3.4"/>
+    <path d="M33 32.2c3.1 0 5.6 2.5 5.6 5.6 0 3.9-5.6 8.2-5.6 8.2s-5.6-4.3-5.6-8.2c0-3.1 2.5-5.6 5.6-5.6Z"
+          fill="#7BC49B"/>
+    <circle cx="33" cy="37.6" r="2.1" fill="#fff"/>
+  </symbol>
+  <!-- flat one-colour version for favicon / print -->
+  <symbol id="mark-flat" viewBox="0 0 48 48">
+    <path d="M15 13h9a6.5 6.5 0 0 1 0 13h-6a6.5 6.5 0 0 0 0 13h9"
+          fill="none" stroke="currentColor" stroke-width="5.4" stroke-linecap="round"/>
+    <circle cx="14.5" cy="13" r="5" fill="currentColor"/>
+    <circle cx="33" cy="39" r="6" fill="currentColor"/>
+  </symbol>
+</svg>
+
+<div class="page">
+  <!-- ============ brand side ============ -->
+  <div class="brand-side">
+    <div class="mark-lg"><svg width="66" height="66"><use href="#mark"/></svg></div>
+    <h1 class="wordmark"><span class="or">OR</span> <span class="jr">Journey</span></h1>
+    <p class="tagline">ทุกการส่งต่อ เชื่อมถึงกันอย่างราบรื่น</p>
+    <div class="rule"><i></i><svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="#A9C8A2" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg><i></i></div>
+    <p class="blurb">ติดตามสถานะการเดินทางของผู้ป่วยระหว่างหอผู้ป่วย ห้องผ่าตัด และห้องพักฟื้น
+      แบบเรียลไทม์ โดยไม่เก็บข้อมูลที่ระบุตัวผู้ป่วย</p>
+
+    <div class="flow">
+      <div class="flow-line"></div>
+      <div class="flow-step">
+        <div class="pin"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.9"><path d="M3 21V9l9-6 9 6v12"/><path d="M9 21v-6h6v6"/></svg></div>
+        <div class="lb">หอผู้ป่วย</div><div class="sub">สร้าง Journey</div>
+      </div>
+      <div class="flow-step">
+        <div class="pin"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.9"><path d="M2 11h20"/><path d="M5 11V9h4"/><path d="M6 11v3M18 11v3"/>
+          <circle cx="6" cy="16.5" r="1.6"/><circle cx="18" cy="16.5" r="1.6"/></svg></div>
+        <div class="lb">หน่วยเปล</div><div class="sub">นำส่ง</div>
+      </div>
+      <div class="flow-step">
+        <div class="pin"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.9"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+          <path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg></div>
+        <div class="lb">ห้องผ่าตัด</div><div class="sub">ยืนยัน 2 ชั้น</div>
+      </div>
+      <div class="flow-step">
+        <div class="pin"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.9"><path d="M3 18v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6"/>
+          <path d="M3 18h18M7 10V7h5v3"/></svg></div>
+        <div class="lb">ส่งกลับ</div><div class="sub">ถึงหอผู้ป่วย</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ form side ============ -->
+  <div class="form-side">
+    <div class="card">
+      <h2>เข้าสู่ระบบ</h2>
+      <p class="sub">สำหรับเจ้าหน้าที่ของโรงพยาบาล</p>
+
+      <div class="field">
+        <label for="em">อีเมล</label>
+        <div class="inp">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+            <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/></svg>
+          <input id="em" type="email" placeholder="name@cmu.ac.th" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="pw">รหัสผ่าน</label>
+        <div class="inp">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+            <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          <input id="pw" type="password" placeholder="••••••••" />
+        </div>
+      </div>
+
+      <div class="row-between">
+        <label class="chk"><span class="box"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="3"><path d="m5 12 5 5 9-9"/></svg></span>จดจำการเข้าสู่ระบบ</label>
+        <a class="link" href="#">ลืมรหัสผ่าน?</a>
+      </div>
+
+      <button class="btn btn-primary">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/></svg>
+        เข้าสู่ระบบ
+      </button>
+
+      <div class="or-sep"><i></i>หรือ<i></i></div>
+
+      <button class="btn btn-ghost">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M5 12h14"/></svg>
+        สมัครใช้งาน (สำหรับเจ้าหน้าที่ใหม่)
+      </button>
+
+      <div class="notice">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+        <span>ระบบนี้ไม่เก็บชื่อผู้ป่วย HN เลขบัตรประชาชน การวินิจฉัย หรือชื่อหัตถการ
+          ข้อมูลทั้งหมดเป็นเพียงสถานะกระบวนการเท่านั้น</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ does the mark survive small sizes? ============ -->
+<div class="proof">
+  <div class="cell"><div class="appicon"><svg width="40" height="40"><use href="#mark"/></svg></div>
+    <div class="cap">ไอคอนโฮม</div></div>
+  <div class="cell"><svg width="32" height="32"><use href="#mark"/></svg><div class="cap">32 px · ไล่สี</div></div>
+  <div class="cell"><svg width="16" height="16"><use href="#mark"/></svg><div class="cap">16 px · ไล่สี</div></div>
+  <div class="cell" style="color:#5FA97D"><svg width="16" height="16"><use href="#mark-flat"/></svg>
+    <div class="cap">16 px · สีเดียว</div></div>
+  <div class="cell" style="color:#000"><svg width="18" height="18"><use href="#mark-flat"/></svg>
+    <div class="cap">พิมพ์ขาวดำ</div></div>
+</div>
+
+</body>
+</html>

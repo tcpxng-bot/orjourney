@@ -1,0 +1,13 @@
+{
+  "name": "OR Journey",
+  "short_name": "OR Journey",
+  "description": "ติดตามสถานะการเดินทางของผู้ป่วยในห้องผ่าตัด",
+  "start_url": "../index.html",
+  "display": "standalone",
+  "background_color": "#F8FAF8",
+  "theme_color": "#F8FAF8",
+  "icons": [
+    { "src": "app-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
