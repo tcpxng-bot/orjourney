@@ -3,7 +3,7 @@
    Order matters: config → constants → mock → api → views → app
    ============================================================================ */
 
-const OJ_BUILD = '2026-07-27b';
+const OJ_BUILD = '2026-07-27i';
 let pendingBootMsg = null;
 
 function fatal(msg, detail){
@@ -76,4 +76,3 @@ async function boot(){
 }
 
 document.addEventListener('DOMContentLoaded', boot);
-
