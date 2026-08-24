@@ -69,6 +69,9 @@ const IC = {
   hourglass:'<path d="M5 22h14M5 2h14M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/>',
   refresh:'<path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/>',
   x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff:'<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.7 18.7 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a18.7 18.7 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/>',
   history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/>',
   pause:'<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
   door:'<path d="M18 20V6a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14"/><path d="M3 20h18"/><path d="M14 12v.01"/>',
@@ -141,9 +144,9 @@ const TRANSITIONS = {
   WAITING_PORTER:[{to:'PORTER_TO_OR', role:'PORTER', label:'รับผู้ป่วย · เลือกห้อง', icon:'check', pickup:true}],
   PORTER_TO_OR:[{to:'OR_VERIFY_1', role:'OR', label:'ยืนยันตัวผู้ป่วย (ครั้งที่ 1)', icon:'idCard', verify:1}],
   OR_VERIFY_1:[{to:'IN_OR', role:'OR', label:'ยืนยันตัว (ครั้งที่ 2) · เริ่มผ่าตัด', icon:'idCard', verify:2}],
-  IN_OR:[{to:'SURGERY_FINISHED', role:'OR', label:'ผ่าตัดเสร็จ', icon:'checkCircle', confirm:true}],
+  IN_OR:[{to:'SURGERY_FINISHED', role:'OR', label:'ผ่าตัดเสร็จ · เลือกปลายทาง', icon:'checkCircle', surgeryDone:true}],
   SURGERY_FINISHED:[{to:'IN_RR', role:'RR', label:'รับเข้า RR · ยืนยันป้ายข้อมือ', icon:'wristband', rrReceive:true}],
-  IN_RR:[{to:'COMPLETED', role:'RR', label:'ส่งกลับหอผู้ป่วย', icon:'checkCircle', confirm:true}],
+  IN_RR:[{to:'COMPLETED', role:'RR', label:'ส่งออกจากห้องพักฟื้น', icon:'checkCircle', rrDischarge:true}],
 };
 
 /* mock OR nurses (real app: pulled from logged-in user's profile) */
@@ -154,22 +157,9 @@ const RR_STAFF = ['พว. ปรียา','พว. สุดา','พว. ม�
 /* ---------------------------- ROLES -------------------------------------- */
 const ROLES = {
   PORTER:{name:'หน่วยเปล', desc:'รับผู้ป่วยจากหอและนำส่งห้องผ่าตัด', color:'var(--powder)', tint:'var(--powder-tint)', ink:'#345061', icon:'stretcher'},
-  OR:{name:'ห้องผ่าตัด', desc:'รับผู้ป่วยและอัปเดตขั้นผ่าตัด', color:'var(--peach)', tint:'var(--peach-tint)', ink:'#8a4a2c', icon:'scissors'},
+  OR:{name:'ทีม OR–RR', desc:'ดูแลตั้งแต่รับเข้าห้องผ่าตัดจนส่งกลับหอผู้ป่วย', color:'var(--peach)', tint:'var(--peach-tint)', ink:'#8a4a2c', icon:'scissors'},
   RR:{name:'ห้องพักฟื้น', desc:'ดูแลระยะพักฟื้นและส่งกลับ', color:'var(--lavender)', tint:'var(--lavender-tint)', ink:'#4c4470', icon:'heart'},
   WARD:{name:'หอผู้ป่วย', desc:'ติดตามสถานะแบบเรียลไทม์', color:'var(--sage)', tint:'var(--sage-tint)', ink:'#2f5a3d', icon:'bed'},
   PR:{name:'ประชาสัมพันธ์', desc:'ตรวจสอบสถานะให้ญาติ', color:'var(--amber)', tint:'var(--amber-tint)', ink:'#7a5417', icon:'info'},
   ADMIN:{name:'ผู้ดูแลระบบ', desc:'จัดการผู้ใช้ วอร์ด และระบบ', color:'var(--ink-3)', tint:'var(--line)', ink:'#4a463f', icon:'shield'},
 };
-
-
-/* ---- multi-role helpers -------------------------------------------------
-   A profile holds one primary `role` plus optional `extra_roles`. The set of
-   roles a person can operate as is the union, de-duplicated, primary first. */
-function rolesOf(p){
-  if(!p) return [];
-  const list=[p.role, ...((p.extra_roles)||[])].filter(Boolean);
-  return [...new Set(list)];
-}
-function hasRole(r){
-  return ((Session && Session.profile && Session.profile.roles) || []).includes(r);
-}
