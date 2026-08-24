@@ -7,13 +7,13 @@
 /* Demo-only reference rows. In live mode Reference.load() replaces these with
    the real rows (and real uuid ids) from the database — see api.js. */
 const DEMO_WARDS = [
-  {id:'w1', name:'อายุรกรรมหญิง 1'},
-  {id:'w2', name:'สูตินรีเวชกรรม'},
-  {id:'w3', name:'ศัลยกรรมหญิง'},
-  {id:'w4', name:'นรีเวชกรรม'},
-  {id:'lr', name:'ห้องคลอด (LR)'},
+  {id:'w1', name:'อายุรกรรมหญิง 1', is_active:true},
+  {id:'w2', name:'สูตินรีเวชกรรม', is_active:true},
+  {id:'w3', name:'ศัลยกรรมหญิง', is_active:true},
+  {id:'w4', name:'นรีเวชกรรม', is_active:true},
+  {id:'lr', name:'ห้องคลอด (LR)', is_active:true},
 ];
-const DEMO_OR_ROOMS = [{id:'or1',name:'OR 1'},{id:'or2',name:'OR 2'},{id:'or3',name:'OR 3'},{id:'or4',name:'OR 4'}];
+const DEMO_OR_ROOMS = [{id:'or1',name:'OR 1',is_active:true},{id:'or2',name:'OR 2',is_active:true},{id:'or3',name:'OR 3',is_active:true},{id:'or4',name:'OR 4',is_active:true}];
 
 let SEQ = 1;
 function now(){return Date.now()}
@@ -116,6 +116,28 @@ const MockStore = {
     }
     this.logEvent(j.id,'IDENTITY_VERIFIED',{step, nurse:nurse.name});
     this.audit.unshift(auditRow(byRole,'IDENTITY_VERIFIED','journey',j.id,true,{step, nurse:nurse.name}));
+    this.emit();
+    return {ok:true};
+  },
+
+  async route(journeyId, toStatus, meta={}){
+    const j=this.journeys.find(x=>x.id===journeyId);
+    if(!j) return {ok:false,msg:'ไม่พบ Journey นี้'};
+    j.status=toStatus; j.updated_at=now();
+    const tsKey={SURGERY_FINISHED:'surgery_finished_at',COMPLETED:'completed_at'}[toStatus];
+    if(tsKey) j.timestamps[tsKey]=now();
+    if(meta.discharge_type) j.discharge_type=meta.discharge_type;
+    if('discharge_ward_id' in meta){
+      j.discharge_ward_id=meta.discharge_ward_id||null;
+      const w=WARDS.find(x=>x.id===j.discharge_ward_id); j.discharge_ward_name=w?w.name:null;
+    }
+    const actor=(typeof State!=='undefined'&&State.role)?State.role:'OR';
+    this.logEvent(j.id,'STATUS_CHANGED',{to:toStatus,dest:meta.discharge_type||'RR'});
+    this.audit.unshift(auditRow(actor,'STATUS_CHANGED','journey',j.id,true,{to:toStatus,dest:meta.discharge_type||null}));
+    if(toStatus==='COMPLETED'){
+      j.staff_token=null; j.public_code=null;
+      this.audit.unshift(auditRow(actor,'JOURNEY_COMPLETED','journey',j.id,true,{dest:meta.discharge_type||'WARD'}));
+    }
     this.emit();
     return {ok:true};
   },
