@@ -42,6 +42,9 @@ function fromRow(r){
     or_room_id: r.or_room_id || null,
     or_room: room ? room.name : null,
     dest: room ? room.name : 'ห้องผ่าตัด',
+    discharge_type: r.discharge_type || null,
+    discharge_ward_id: r.discharge_ward_id || null,
+    discharge_ward_name: r.discharge_ward_id ? (WARDS.find(w=>w.id===r.discharge_ward_id)||{}).name || null : null,
     staff_token: r.staff_token_active ? 'active' : null,
     public_code: r.public_code_active ? r.case_code : null,
     verifyPorter: r.verify_porter_name ? {by:r.verify_porter_name, at:tsToMs(r.verify_porter_at),
@@ -205,6 +208,21 @@ const SupabaseStore = {
 
     const { error } = await sb.from('journeys').update(patch).eq('id', journeyId);
     if(error){ console.error('[OR Journey] transition failed:', error); return {ok:false, msg:friendly(error)}; }
+    await this.refreshOne(journeyId);
+    return {ok:true};
+  },
+
+  /* Route a case to its destination — OR finishing surgery (→ RR / ICU / ward)
+     or RR discharging (→ ward / ICU / home). RLS enforces who may do what. */
+  async route(journeyId, toStatus, meta={}){
+    const patch = { status: toStatus, updated_at: isoNow() };
+    const tsKey = { SURGERY_FINISHED:'surgery_finished_at', COMPLETED:'completed_at' }[toStatus];
+    if(tsKey) patch[tsKey] = isoNow();
+    if(meta.discharge_type) patch.discharge_type = meta.discharge_type;
+    if('discharge_ward_id' in meta) patch.discharge_ward_id = meta.discharge_ward_id || null;
+    if(toStatus === 'COMPLETED'){ patch.staff_token_active = false; patch.public_code_active = false; }
+    const { error } = await sb.from('journeys').update(patch).eq('id', journeyId);
+    if(error){ console.error('[OR Journey] route failed:', error); return {ok:false, msg:friendly(error)}; }
     await this.refreshOne(journeyId);
     return {ok:true};
   },
@@ -381,8 +399,8 @@ const Approvals = {
 const Reference = {
   async load(){
     if(DEMO_MODE){
-      WARDS = DEMO_WARDS.slice();
-      OR_ROOMS = DEMO_OR_ROOMS.slice();
+      WARDS = DEMO_WARDS.filter(w=>w.is_active!==false);
+      OR_ROOMS = DEMO_OR_ROOMS.filter(o=>o.is_active!==false);
       WARD_USERS = WARDS.slice();
       return {ok:true};
     }
@@ -416,6 +434,67 @@ const Reference = {
       // Tables are readable but empty -> the seed really has not been run.
       return {ok:false, msg:'ยังไม่มีข้อมูลหอผู้ป่วยหรือห้องผ่าตัด — กรุณารัน sql/03_seed.sql ใน Supabase ก่อน'};
     }
+    return {ok:true};
+  },
+};
+
+/* Admin editing of reference data (wards / OR rooms). RLS already lets ADMIN
+   write these tables (admin_write_wards / admin_write_orrooms), so this needs
+   no new SQL — it's a UI on top of a right that already exists.
+   `kind` is 'wards' or 'rooms'; rows are never deleted (journeys/profiles may
+   reference them by id) — only added, renamed, or deactivated. */
+const REF_TABLE = {wards:'wards', rooms:'or_rooms'};
+const AdminRef = {
+  async listAll(kind){
+    const table = REF_TABLE[kind];
+    if(DEMO_MODE){
+      const arr = kind==='wards' ? DEMO_WARDS : DEMO_OR_ROOMS;
+      return {ok:true, rows: arr.slice().sort((a,b)=>a.name.localeCompare(b.name,'th'))};
+    }
+    const { data, error } = await sb.from(table).select('id, name, is_active').order('name');
+    if(error) return {ok:false, msg:friendly(error)};
+    return {ok:true, rows:data||[]};
+  },
+  async add(kind, name){
+    name = (name||'').trim();
+    if(!name) return {ok:false, msg:'กรุณากรอกชื่อ'};
+    const table = REF_TABLE[kind];
+    if(DEMO_MODE){
+      const arr = kind==='wards' ? DEMO_WARDS : DEMO_OR_ROOMS;
+      if(arr.some(x=>x.name===name)) return {ok:false, msg:'มีชื่อนี้อยู่แล้ว'};
+      arr.push({id:(kind==='wards'?'w_':'or_')+Date.now().toString(36), name, is_active:true});
+    } else {
+      const { error } = await sb.from(table).insert({name});
+      if(error) return {ok:false, msg: /duplicate|unique/i.test(error.message||'') ? 'มีชื่อนี้อยู่แล้ว' : friendly(error)};
+    }
+    await Reference.load();
+    return {ok:true};
+  },
+  async rename(kind, id, name){
+    name = (name||'').trim();
+    if(!name) return {ok:false, msg:'กรุณากรอกชื่อ'};
+    const table = REF_TABLE[kind];
+    if(DEMO_MODE){
+      const arr = kind==='wards' ? DEMO_WARDS : DEMO_OR_ROOMS;
+      if(arr.some(x=>x.name===name && x.id!==id)) return {ok:false, msg:'มีชื่อนี้อยู่แล้ว'};
+      const row=arr.find(x=>x.id===id); if(row) row.name=name;
+    } else {
+      const { error } = await sb.from(table).update({name}).eq('id', id);
+      if(error) return {ok:false, msg: /duplicate|unique/i.test(error.message||'') ? 'มีชื่อนี้อยู่แล้ว' : friendly(error)};
+    }
+    await Reference.load();
+    return {ok:true};
+  },
+  async setActive(kind, id, active){
+    const table = REF_TABLE[kind];
+    if(DEMO_MODE){
+      const arr = kind==='wards' ? DEMO_WARDS : DEMO_OR_ROOMS;
+      const row=arr.find(x=>x.id===id); if(row) row.is_active=active;
+    } else {
+      const { error } = await sb.from(table).update({is_active:active}).eq('id', id);
+      if(error) return {ok:false, msg:friendly(error)};
+    }
+    await Reference.load();
     return {ok:true};
   },
 };
