@@ -14,7 +14,7 @@
    data, so you can click through the screens before wiring the database.
    ============================================================================ */
 window.OJ_CONFIG = {
-  supabaseUrl:     'https://sgviqseqwneowjtqskmy.supabase.co/rest/v1/',   // e.g. 'https://abcdefghijkl.supabase.co'
+  supabaseUrl:     'https://sgviqseqwneowjtqskmy.supabase.co',   // Project URL only — do not append /rest/v1/
   supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNndmlxc2Vxd25lb3dqdHFza215Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3MjUzNTEsImV4cCI6MjEwMDMwMTM1MX0.O8XvXl0Ydgw98fpCi-0omYapnBxiHSiDU9roA3xJo74',   // e.g. 'eyJhbGciOi...'
 
   // Force demo mode even when credentials are present (useful for training).
