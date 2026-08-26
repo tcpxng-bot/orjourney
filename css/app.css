@@ -519,10 +519,10 @@ code{font-family:var(--mono);background:rgba(0,0,0,.05);padding:1px 5px;border-r
 .auth-brand{
   position:relative;overflow:hidden;padding:56px 48px;
   display:flex;flex-direction:column;justify-content:center;
-  background:linear-gradient(160deg,#EAF4FB 0%,var(--paper) 55%,#E6F3EB 100%);
+  background:linear-gradient(160deg,#EAF4FB 0%,#EEF6F1 30%,#F4F9F5 50%,#EFF6F0 70%,#E6F3EB 100%);
 }
 .auth-brand::after{content:'';position:absolute;left:-10%;right:-10%;bottom:-18%;height:52%;
-  background:radial-gradient(60% 100% at 50% 100%,rgba(123,196,155,.18),transparent 70%);pointer-events:none}
+  background:radial-gradient(60% 100% at 50% 100%,rgba(123,196,155,.16),transparent 75%);pointer-events:none}
 .auth-main{display:grid;place-items:center;padding:40px 22px;background:var(--paper)}
 .auth-card{width:100%;max-width:404px;background:var(--card);border:1px solid var(--line);
   border-radius:var(--r-xl);padding:32px 28px;box-shadow:0 6px 24px rgba(46,58,58,.05)}
@@ -546,7 +546,7 @@ code{font-family:var(--mono);background:rgba(0,0,0,.05);padding:1px 5px;border-r
 .flow-step:nth-child(2) .pin{background:linear-gradient(150deg,#A6D5F8,#7DBCF6)}
 .flow-step:nth-child(3) .pin{background:linear-gradient(150deg,#7DBCF6,#8FC9CF)}
 .flow-step:nth-child(4) .pin{background:linear-gradient(150deg,#8FC9CF,#7BC49B)}
-.flow-step:nth-child(5) .pin{background:linear-gradient(150deg,#7BC49B,#A9C8A2)}
+.flow-step:nth-child(5) .pin{background:linear-gradient(150deg,#7BC49B,#4C9E72)}
 .flow-step .lb{font-size:12px;font-weight:600;color:var(--ink-2)}
 .flow-step .sub{font-size:11px;color:var(--ink-3);margin-top:2px}
 .flow-line{position:absolute;top:25px;left:12%;right:12%;height:2px;
@@ -555,8 +555,6 @@ code{font-family:var(--mono);background:rgba(0,0,0,.05);padding:1px 5px;border-r
 .inp{position:relative;display:flex;align-items:center}
 .inp .inp-ic{position:absolute;left:14px;color:var(--ink-3);pointer-events:none;width:18px;height:18px}
 .inp .input{padding-left:44px}
-.inp .input:has(+ .email-suffix){padding-right:112px}
-.email-suffix{position:absolute;right:14px;color:var(--ink-3);font-size:14px;pointer-events:none}
 .or-sep{display:flex;align-items:center;gap:13px;margin:18px 0;color:var(--ink-3);font-size:13px}
 .or-sep i{flex:1;height:1px;background:var(--line)}
 
