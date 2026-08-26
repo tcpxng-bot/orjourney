@@ -543,10 +543,13 @@ code{font-family:var(--mono);background:rgba(0,0,0,.05);padding:1px 5px;border-r
 .flow-step .pin{width:50px;height:50px;border-radius:50%;display:grid;place-items:center;color:#fff;
   position:relative;z-index:2;box-shadow:0 4px 12px rgba(46,58,58,.13);margin-bottom:9px}
 .flow-step .pin .ic{width:21px;height:21px}
-.flow-step:nth-child(2) .pin{background:linear-gradient(150deg,#A6D5F8,#7DBCF6)}
-.flow-step:nth-child(3) .pin{background:linear-gradient(150deg,#7DBCF6,#8FC9CF)}
-.flow-step:nth-child(4) .pin{background:linear-gradient(150deg,#8FC9CF,#7BC49B)}
-.flow-step:nth-child(5) .pin{background:linear-gradient(150deg,#7BC49B,#4C9E72)}
+/* Count only .flow-step elements. The old nth-child(2..5) selectors also
+   counted .flow-line (and any other helper element), so the final pin could
+   miss its background and render as a pale/white circle. */
+.flow-step:nth-child(1 of .flow-step) .pin{background:linear-gradient(150deg,#A6D5F8,#7DBCF6)}
+.flow-step:nth-child(2 of .flow-step) .pin{background:linear-gradient(150deg,#7DBCF6,#8FC9CF)}
+.flow-step:nth-child(3 of .flow-step) .pin{background:linear-gradient(150deg,#8FC9CF,#7BC49B)}
+.flow-step:nth-child(4 of .flow-step) .pin{background:linear-gradient(150deg,#7BC49B,#4C9E72)}
 .flow-step .lb{font-size:12px;font-weight:600;color:var(--ink-2)}
 .flow-step .sub{font-size:11px;color:var(--ink-3);margin-top:2px}
 .flow-line{position:absolute;top:25px;left:12%;right:12%;height:2px;
