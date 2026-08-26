@@ -515,15 +515,23 @@ code{font-family:var(--mono);background:rgba(0,0,0,.05);padding:1px 5px;border-r
 .who .who-ic{width:12px;height:12px;opacity:.6;flex-shrink:0}
 
 /* ============================================================ AUTH SCREENS */
-.auth{min-height:100dvh;display:grid;grid-template-columns:1.1fr .9fr}
+.auth{min-height:100dvh;display:grid;grid-template-columns:1.1fr .9fr;
+  /* One continuous ombre across both columns, so there is no hard seam
+     between the brand panel and the login panel. */
+  background:linear-gradient(100deg,
+    #EAF4FB 0%,
+    #EEF6F1 34%,
+    #F3F8F4 50%,
+    #F8FAF8 68%,
+    #F8FAF8 100%)}
 .auth-brand{
   position:relative;overflow:hidden;padding:56px 48px;
   display:flex;flex-direction:column;justify-content:center;
-  background:linear-gradient(160deg,#EAF4FB 0%,#EEF6F1 30%,#F4F9F5 50%,#EFF6F0 70%,#E6F3EB 100%);
+  background:transparent;
 }
 .auth-brand::after{content:'';position:absolute;left:-10%;right:-10%;bottom:-18%;height:52%;
   background:radial-gradient(60% 100% at 50% 100%,rgba(123,196,155,.16),transparent 75%);pointer-events:none}
-.auth-main{display:grid;place-items:center;padding:40px 22px;background:var(--paper)}
+.auth-main{display:grid;place-items:center;padding:40px 22px;background:transparent}
 .auth-card{width:100%;max-width:404px;background:var(--card);border:1px solid var(--line);
   border-radius:var(--r-xl);padding:32px 28px;box-shadow:0 6px 24px rgba(46,58,58,.05)}
 .auth-card h2{font-family:var(--display);font-size:25px;font-weight:600;text-align:center;margin:0 0 5px}
