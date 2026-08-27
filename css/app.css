@@ -318,6 +318,11 @@ select:focus,.input:focus{box-shadow:inset 0 0 0 1.5px var(--accent);outline:non
 .stat .n{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1}
 .stat .l{font-size:11.5px;color:var(--ink-2);margin-top:5px;font-weight:500}
 
+/* OR board: compact by default for phones; enhanced inside the desktop query. */
+.or-board-view{width:100%;min-width:0}
+.or-board-view .stat{min-width:0}
+.or-empty .empty{padding:38px 20px}
+
 .empty{text-align:center;padding:52px 24px;color:var(--ink-3)}
 .empty .em-ic{width:56px;height:56px;border-radius:var(--r-lg);background:var(--card);border:1px solid var(--line);display:grid;place-items:center;margin:0 auto 16px;color:var(--ink-3)}
 .empty h4{font-size:16px;font-weight:600;color:var(--ink-2);margin-bottom:6px}
@@ -451,13 +456,25 @@ select:focus,.input:focus{box-shadow:inset 0 0 0 1.5px var(--accent);outline:non
   .sb-brand{display:flex;align-items:center;gap:11px;padding:6px 10px 20px}
   .sb-brand .bm{width:38px;height:38px;border-radius:11px;background:linear-gradient(145deg,var(--sage-tint),var(--powder-tint));display:grid;place-items:center;border:1px solid var(--line)}
   .sb-brand .nm{font-weight:600;font-size:16px}
-  .sb-item{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:var(--r);color:var(--ink-2);font-weight:500;font-size:14.5px;transition:background .15s,color .15s}
+  .sb-item{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:var(--r);color:#607366;font-weight:500;font-size:14.5px;transition:background .15s,color .15s}
   .sb-item svg{width:20px;height:20px}
   .sb-item.active{background:var(--sage-tint);color:var(--ink);font-weight:600}
   .sb-item:hover:not(.active){background:var(--paper)}
   .sb-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
   .bottomnav{display:none}
   .viewport{padding-bottom:40px}
+  /* Widen only the OR board and center it in the area beside the sidebar. */
+  .viewport:has(> .or-board-view){max-width:920px;padding-left:28px;padding-right:28px}
+  .or-board-view .stat-row{gap:16px}
+  .or-board-view .stat{padding:19px 18px}
+  .or-board-view .stat .n{font-size:34px}
+  .or-board-view .stat .l{font-size:13px;margin-top:9px;color:#607366}
+  .or-board-view .section-title{margin-top:24px;color:#607366}
+  .or-empty{border:1px dashed var(--line-2);border-radius:var(--r-lg);background:color-mix(in srgb,var(--card) 58%,transparent)}
+  .or-empty .empty{min-height:250px;padding:48px 24px;display:flex;flex-direction:column;justify-content:center}
+  .or-empty .empty .em-ic{width:64px;height:64px;border-radius:50%;background:var(--sage-tint);border:0;color:var(--green)}
+  .or-empty .empty h4{font-size:17px;color:var(--ink);margin-bottom:7px}
+  .or-empty .empty p{max-width:380px;color:#607366}
   .sheet{border-radius:var(--r-xl);top:50%;bottom:auto;left:50%;right:auto;transform:translate(-50%,-46%) scale(.96);width:min(460px,92vw);max-height:86dvh}
   .sheet.open{transform:translate(-50%,-50%) scale(1)}
   .stat .n{font-size:30px}
