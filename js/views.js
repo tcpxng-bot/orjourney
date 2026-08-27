@@ -10,13 +10,6 @@ const State = {
 /* ---------------------------- UTILITIES ---------------------------------- */
 function fmtTime(ts){const d=new Date(ts);return d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})+' น.'}
 function ago(ts){const m=Math.max(0,Math.round((now()-ts)/60000));if(m<1)return'เมื่อสักครู่';if(m<60)return`${m} นาที`;const h=Math.floor(m/60);return`${h} ชม. ${m%60} น.`}
-
-/* Plain elapsed-time chip — how long the case has been in its current stage.
-   No fixed SLA / "overdue" labelling: the workflow has no hard time targets,
-   so the raw minutes are shown without judging them late. */
-function timeChip(j){
-  return `<span class="jcard-time">${svg('clock')} ${ago(j.updated_at)}</span>`;
-}
 function statusPill(st){const s=STATUS[st];return `<span class="status" style="background:${s.tint};color:${s.ink};border-color:color-mix(in srgb,${s.color} 34%,transparent)">${svg(s.icon)}${s.label}</span>`}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
@@ -73,8 +66,6 @@ function ddDispatch(id, val){
   else if(id==='apvReject'){ _apvReject=val; }
   else if(id==='eWard'){ _eWard=val; }
   else if(id==='eRoom'){ _eRoom=val; }
-  else if(id==='sdWard'){ _sdWard=val; }
-  else if(id==='rdWard'){ _rdWard=val; }
 }
 document.addEventListener('click', e=>{ if(!e.target.closest('.dd')) document.querySelectorAll('.dd.open').forEach(d=>d.classList.remove('open')); });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') document.querySelectorAll('.dd.open').forEach(d=>d.classList.remove('open')); });
@@ -83,29 +74,24 @@ let CForm={src:null, dest:null};
 /* ---------------------------- UI helpers --------------------------------- */
 const UI = {
   toast(msg,kind=''){const t=document.createElement('div');t.className='toast '+kind;t.innerHTML=(kind==='ok'?svg('check'):kind==='err'?svg('alert'):'')+`<span>${esc(msg)}</span>`;document.getElementById('toasts').appendChild(t);setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300)},2600)},
-  openSheet(html){const s=document.getElementById('sheet');s.innerHTML=`<div class="sheet-head"><span class="sheet-grab"></span><button class="sheet-x" onclick="UI.closeSheet()" aria-label="ปิด">${svg('x')}</button></div>`+html;document.getElementById('scrim').classList.add('open');s.classList.add('open')},
+  openSheet(html){const s=document.getElementById('sheet');s.innerHTML=`<div class="sheet-grab"></div>`+html;document.getElementById('scrim').classList.add('open');s.classList.add('open')},
   closeSheet(){document.getElementById('scrim').classList.remove('open');document.getElementById('sheet').classList.remove('open')},
 };
 
-const BARE_SCREENS = ['login','signup','signup-done','pending','role-choice'];
+const BARE_SCREENS = ['login','signup','signup-done','pending'];
 
 /* ============================================================ RENDER ====== */
-let _lastScreen=null;
 function render(){
   const app=document.getElementById('app');
-  // Animate only when the SCREEN changes — realtime/30s refreshes keep the
-  // same screen, so the board no longer re-animates (and no longer flickers).
-  const changed = State.screen !== _lastScreen; _lastScreen = State.screen;
   // Login / signup / pending render on their own, with no app chrome around them.
   if(BARE_SCREENS.includes(State.screen)){
     app.innerHTML = State.screen==='login'       ? viewLogin()
                   : State.screen==='signup'      ? viewSignup()
                   : State.screen==='signup-done' ? viewSignupDone()
-                  : State.screen==='role-choice' ? viewRoleChoice()
                   :                                viewPending();
     return;
   }
-  app.innerHTML = `<div class="shell">${sidebar()}<div class="main">${topbar()}<div class="viewport${changed?' screen-in':''}" id="vp">${screenBody()}</div></div></div>${bottomnav()}`;
+  app.innerHTML = `<div class="shell">${sidebar()}<div class="main">${topbar()}<div class="viewport fade" id="vp">${screenBody()}</div></div></div>${bottomnav()}`;
 }
 
 function screenBody(){
@@ -129,15 +115,14 @@ function screenBody(){
 /* ---------------------------- LOGIN -------------------------------------- */
 function viewLogin(){
   const demo = (typeof DEMO_MODE!=='undefined') && DEMO_MODE;
-  return `<div class="auth stagger">
+  return `<div class="auth">
     <aside class="auth-brand">
-      <div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div>
       <div class="mark-lg">${brandMark()}</div>
       <h1 class="wordmark"><span>OR</span> <span class="jr">Journey</span></h1>
       <p class="wordmark-sub">ทุกการส่งต่อ เชื่อมถึงกันอย่างราบรื่น</p>
       <p class="wordmark-blurb">ติดตามสถานะการเดินทางของผู้ป่วยระหว่างหอผู้ป่วย ห้องผ่าตัด
         และห้องพักฟื้นแบบเรียลไทม์ โดยไม่เก็บข้อมูลที่ระบุตัวผู้ป่วย</p>
-      ${flowStrip(true)}
+      ${flowStrip()}
     </aside>
 
     <main class="auth-main">
@@ -152,9 +137,8 @@ function viewLogin(){
         <div class="field">
           <label for="loginEmail">อีเมล</label>
           <div class="inp">${svg('mail','inp-ic')}
-            <input class="input" id="loginEmail" type="text" autocomplete="username"
-                   inputmode="email" autocapitalize="none" placeholder="ชื่ออีเมล" />
-            <span class="email-suffix">@cmu.ac.th</span></div>
+            <input class="input" id="loginEmail" type="email" autocomplete="username"
+                   inputmode="email" placeholder="name@cmu.ac.th" /></div>
         </div>
         <div class="field">
           <label for="loginPass">รหัสผ่าน</label>
@@ -192,11 +176,11 @@ function helpLine(label){
 
 /* The four stages, shown before sign-in so a first-time user understands the
    product without being told. */
-function flowStrip(withTraveler){
+function flowStrip(){
   const steps=[['home','หอผู้ป่วย','สร้าง Journey'],['stretcher','หน่วยเปล','นำส่ง'],
                ['scissors','ห้องผ่าตัด','ยืนยัน 2 ชั้น'],['bed','ส่งกลับ','ถึงหอผู้ป่วย']];
-  return `<div class="flow"><div class="flow-line"></div>${withTraveler?'<div class="traveler"></div>':''}
-    ${steps.map(([ic,lb,sub],i)=>`<div class="flow-step" style="--p:${i}">
+  return `<div class="flow"><div class="flow-line"></div>
+    ${steps.map(([ic,lb,sub])=>`<div class="flow-step">
       <span class="pin">${svg(ic)}</span>
       <span class="lb">${lb}</span><span class="sub">${sub}</span></div>`).join('')}</div>`;
 }
@@ -222,7 +206,7 @@ function signupUnits(){
   // WARDS is empty on this screen in production and cannot be relied on.
   if(Array.isArray(CFG.signupUnits) && CFG.signupUnits.length) return CFG.signupUnits;
   const wards = WARD_USERS.map(w=>w.name);
-  return [...wards, 'ทีม OR–RR', 'หน่วยเปล', 'ประชาสัมพันธ์', 'อื่น ๆ'];
+  return [...wards, 'ห้องผ่าตัด (OR)', 'ห้องพักฟื้น (RR)', 'หน่วยเปล', 'ประชาสัมพันธ์', 'อื่น ๆ'];
 }
 let _suUnit='';
 
@@ -309,15 +293,9 @@ function viewPending(){
   </div>`;
 }
 
-function cmuEmail(value){
-  const raw=(value||'').trim().toLowerCase();
-  if(!raw) return '';
-  return raw.includes('@') ? raw : raw+'@cmu.ac.th';
-}
-
 async function submitLogin(){
   const btn=document.getElementById('loginBtn');
-  const email=cmuEmail(document.getElementById('loginEmail').value);
+  const email=(document.getElementById('loginEmail').value||'').trim();
   const pass=document.getElementById('loginPass').value||'';
   const err=document.getElementById('loginErr');
   err.innerHTML='';
@@ -342,37 +320,7 @@ async function submitLogin(){
       + (ws.detail?`<p class="errdetail" style="margin-top:8px">${esc(ws.detail)}</p>`:'');
     return;
   }
-  if(availableRoles().length > 1){ State.screen='role-choice'; render(); return; }
   await startSession();
-}
-
-function availableRoles(){
-  const p=Session.profile||{};
-  const roles=[p.role].filter(Boolean);
-  if(p.can_work_or && !roles.includes('OR')) roles.push('OR');
-  return roles;
-}
-
-function viewRoleChoice(){
-  const name=(Session.profile&&Session.profile.full_name)||'';
-  return `<div class="login-wrap fade">
-    <div class="brandmark">${brandMark()}</div>
-    <h1>เลือกโหมดการทำงาน</h1>
-    <p class="tag">${name?esc(name)+' · ':''}เลือกตามงานที่กำลังปฏิบัติ</p>
-    <div class="role-list">
-      ${availableRoles().map(role=>{const r=ROLES[role];return `<button class="role-opt" onclick="chooseRole('${role}')">
-        <span class="ro-ic" style="background:${r.tint};color:${r.ink}">${svg(r.icon)}</span>
-        <span><span class="ro-name">${r.name}</span><span class="ro-desc">${r.desc}</span></span>
-        <span class="ro-arrow">${svg('arrowRight')}</span>
-      </button>`}).join('')}
-    </div>
-    <button class="btn btn-soft" style="margin-top:16px" onclick="logout()">${svg('logout')} ออกจากระบบ</button>
-  </div>`;
-}
-
-async function chooseRole(role){
-  if(!availableRoles().includes(role)) return;
-  await startSession(role);
 }
 
 function demoLogin(role){
@@ -391,23 +339,20 @@ function demoLogin(role){
 }
 
 /* Applies the signed-in profile to app state, then opens that role's home. */
-async function startSession(roleOverride){
+async function startSession(){
   const p=Session.profile;
-  const activeRole=roleOverride||availableRoles()[0]||p.role;
-  Session.activeRole=activeRole;
-  State.role=activeRole;
+  State.role=p.role;
   State.wardId=p.ward_id||null;
-  State.screen=defaultScreen(activeRole);
+  State.screen=defaultScreen(p.role);
   if(Store.init) await Store.init();
-  if(activeRole==='ADMIN' && Store.refreshAudit) await Store.refreshAudit();
+  if(p.role==='ADMIN' && Store.refreshAudit) await Store.refreshAudit();
   render();
-  UI.toast(`เข้าสู่ระบบในบทบาท ${ROLES[activeRole].name}`,'ok');
+  UI.toast(`เข้าสู่ระบบในบทบาท ${ROLES[p.role].name}`,'ok');
 }
 
 async function logout(){
   await Auth.signOut();
   Session.profile=null;
-  Session.activeRole=null;
   State.role=null; State.wardId=null; State.screen='login';
   UI.closeSheet(); render();
 }
@@ -439,7 +384,6 @@ function openAccountSheet(){
     <div class="tile" style="margin-bottom:14px;display:flex;gap:12px;align-items:center">
       <span class="ro-ic" style="width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:${r.tint};color:${r.ink}">${svg(r.icon)}</span>
       <div><div style="font-weight:600">${r.name}</div><div style="font-size:12.5px;color:var(--ink-2)">${r.desc}</div></div></div>
-    ${availableRoles().length>1?`<button class="btn btn-soft" style="margin-bottom:10px" onclick="UI.closeSheet();State.screen='role-choice';render()">${svg('refresh')} สลับโหมดการทำงาน</button>`:''}
     <button class="btn btn-soft" style="margin-bottom:10px" onclick="toggleOnline()">${Store.online?svg('wifiOff'):svg('wifi')} จำลอง${Store.online?'ขาดการเชื่อมต่อ':'กลับมาออนไลน์'}</button>
     <button class="btn btn-danger" onclick="logout()">${svg('logout')} ออกจากระบบ</button>`);
 }
@@ -448,7 +392,7 @@ function toggleOnline(){Store.online=!Store.online;UI.closeSheet();render();UI.t
 function navFor(role){
   const N={
     PORTER:[['home','home','งานรับ-ส่ง'],['history','history','ประวัติ']],
-    OR:[['or-board','scissors','ห้องผ่าตัด'],['rr-board','heart','พักฟื้น'],['dashboard','activity','ภาพรวม'],['history','history','ประวัติ']],
+    OR:[['or-board','scissors','กระดาน'],['dashboard','activity','ภาพรวม'],['history','history','ประวัติ']],
     RR:[['rr-board','heart','พักฟื้น'],['dashboard','activity','ภาพรวม'],['history','history','ประวัติ']],
     WARD:[['ward-board','bed','สถานะ'],['history','history','ประวัติ']],
     PR:[['pr-lookup','search','ค้นหา']],
@@ -494,10 +438,10 @@ function roleHome(){
     ${urgent.length?`<div class="section-title urgent-title">${svg('alert')} ด่วน · รับทันที <span class="count">${urgent.length} ราย</span></div>${urgent.map(j=>journeyCard(j,true)).join('')}`:''}
 
     <div class="section-title">${svg('bell')} รอไปรับที่หอผู้ป่วย <span class="count">${pending.length} ราย</span></div>
-    ${pending.length? pending.map(j=>journeyCard(j,true)).join('') : emptyRow('ยังไม่มีงานรอรับตามคิวปกติ')}
+    ${pending.length? pending.map(j=>journeyCard(j,true)).join('') : emptyState('checkCircle','ยังไม่มีงานรอรับตามคิวปกติ','เมื่อหอผู้ป่วยสร้าง Journey รายการจะปรากฏที่นี่ทันที')}
 
     <div class="section-title">${svg('stretcher')} กำลังนำส่ง OR <span class="count">${toOR.length} ราย</span></div>
-    ${toOR.length? toOR.map(j=>journeyCard(j,true)).join('') : emptyRow('ไม่มีเคสระหว่างนำส่ง')}
+    ${toOR.length? toOR.map(j=>journeyCard(j,true)).join('') : emptyState('stretcher','ไม่มีเคสระหว่างนำส่ง','เคสที่รับแล้วจะแสดงที่นี่จนกว่าจะส่งถึง OR')}
 
     <p class="hint-foot">${svg('info')} เมื่อส่งถึง OR แล้ว เคสจะย้ายไปอยู่ในความดูแลของห้องผ่าตัด และดูย้อนหลังได้ที่แท็บประวัติ</p>
   `;
@@ -518,15 +462,12 @@ function journeyCard(j, tappable){
     <div style="padding:0 16px 14px">${statusPill(j.status)}</div>
     <div class="jcard-foot">
       ${action?`<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();doAction('${j.id}','${action.to}')">${svg(action.icon)} ${action.label}</button>`:`<span style="font-size:12.5px;color:var(--ink-3)">${s.stage==='done'?'สิ้นสุด Journey':'รอหน่วยอื่นดำเนินการ'}</span>`}
-      ${timeChip(j)}
+      <span class="jcard-time">${svg('clock')} ${ago(j.updated_at)}</span>
     </div>
   </div>`;
 }
 
 function emptyState(ic,title,desc){return `<div class="empty"><div class="em-ic">${svg(ic)}</div><h4>${title}</h4><p>${desc}</p></div>`}
-/* Slim empty line for board stage sections — keeps each stage visible (stable
-   layout, "genuinely empty, not broken") without a big block that adds scroll. */
-function emptyRow(text){return `<div class="empty-row"><span class="er-dash"></span>${text}</div>`}
 
 /* ---------------------------- PORTER CREATE ------------------------------ */
 async function wardCreate(){
@@ -589,7 +530,7 @@ function orBoard(){
   const done = Store.journeys.filter(j=>j.status==='SURGERY_FINISHED' && inRoom(j));
   const chips = [{v:'all',label:'ทุกห้อง'}, ...OR_ROOMS.map(o=>({v:o.id,label:o.name}))];
   const roomCount = id => Store.journeys.filter(j=>j.or_room_id===id && ['OR_VERIFY_1','IN_OR','SURGERY_FINISHED'].includes(j.status)).length;
-  return `
+  return `<div class="or-board-view">
     <button class="btn btn-emerg" style="margin:6px 0 2px" onclick="openEmergencySheet()">${svg('alert')} เปิดเคสฉุกเฉิน</button>
     <div class="room-filter">
       ${chips.map(c=>{const n=c.v==='all'?0:roomCount(c.v);return `<button class="room-tab ${rf===c.v?'on':''}" onclick="State.orRoom='${c.v}';render()">${esc(c.label)}${c.v!=='all'&&n?`<span class="room-tab-n">${n}</span>`:''}</button>`}).join('')}
@@ -600,10 +541,10 @@ function orBoard(){
       <div class="stat"><div class="n">${done.length}</div><div class="l">เสร็จแล้ว</div></div>
     </div>
     <div class="section-title">${svg('idCard')} รอรับเข้า · ยืนยันตัวผู้ป่วย <span class="count">${arriving.length}</span></div>
-    ${arriving.length?arriving.map(j=>journeyCard(j,true)).join(''):emptyRow('ยังไม่มีผู้ป่วยรอเข้า')}
+    ${arriving.length?arriving.map(j=>journeyCard(j,true)).join(''):`<div class="or-empty">${emptyState('idCard','ยังไม่มีผู้ป่วยรอเข้าห้องผ่าตัด','เมื่อมีรายการใหม่ ระบบจะแสดงที่นี่แบบเรียลไทม์')}</div>`}
     ${inOr.length?`<div class="section-title">${svg('activity')} กำลังผ่าตัด <span class="count">${inOr.length}</span></div>${inOr.map(j=>journeyCard(j,true)).join('')}`:''}
     ${done.length?`<div class="section-title">${svg('checkCircle')} ผ่าตัดเสร็จ รอส่ง RR <span class="count">${done.length}</span></div>${done.map(j=>journeyCard(j,true)).join('')}`:''}
-  `;
+  </div>`;
 }
 
 /* ---------------------------- DASHBOARD ---------------------------------- */
@@ -697,7 +638,7 @@ function rrBoard(){
     </div>
     ${incoming.length?`<div class="section-title">${svg('arrowRight')} รับเข้า RR <span class="count">${incoming.length}</span></div>${incoming.map(j=>journeyCard(j,true)).join('')}`:''}
     <div class="section-title">${svg('heart')} กำลังพักฟื้น · พร้อมส่งกลับหอ <span class="count">${recovering.length}</span></div>
-    ${recovering.length?recovering.map(j=>journeyCard(j,true)).join(''):emptyRow('ห้องพักฟื้นว่าง')}
+    ${recovering.length?recovering.map(j=>journeyCard(j,true)).join(''):emptyState('heart','ห้องพักฟื้นว่าง','เคสที่ผ่าตัดเสร็จจะปรากฏให้รับเข้า RR')}
   `;
 }
 
@@ -729,7 +670,7 @@ function wardCard(j){
         <div class="jcard-name">${AV[j.avatar_id].name}<span class="jcard-code">· ${j.case_code}</span>${j.is_emergency?`<span class="em-chip">ฉุกเฉิน</span>`:''}</div>
         <div style="margin-top:8px">${statusPill(j.status)}</div>
       </div></div>
-    <div class="jcard-foot"><span style="font-size:12.5px;color:var(--ink-2)">อัปเดตล่าสุด ${fmtTime(j.updated_at)}</span>${timeChip(j)}</div>
+    <div class="jcard-foot"><span style="font-size:12.5px;color:var(--ink-2)">อัปเดตล่าสุด ${fmtTime(j.updated_at)}</span><span class="jcard-time">${svg('clock')} ${ago(j.updated_at)}</span></div>
   </div>`;
 }
 
@@ -787,7 +728,7 @@ function openJourney(id){
     <div class="jcard-top" style="padding:0 0 4px">${avatarEl(j.avatar_id,'lg')}
       <div class="jcard-body"><div class="jcard-name" style="font-size:20px">${AV[j.avatar_id].name}<span class="jcard-code">· ${j.case_code}</span>${j.is_emergency?`<span class="em-chip">ฉุกเฉิน</span>`:''}${j.or_room?`<span class="room-chip">${esc(j.or_room)}</span>`:''}</div>
       <div class="jcard-route">${svg('mapPin')}${esc(j.ward_name)} ${svg('arrowRight')} ${esc(j.or_room||j.dest)}</div></div></div>
-    <div style="margin:14px 0">${statusPill(j.status)}${j.status==='COMPLETED'?`<span class="room-chip" style="margin-left:8px;vertical-align:middle">${svg('mapPin')} ${esc(destText(j))}</span>`:''}</div>
+    <div style="margin:14px 0">${statusPill(j.status)}</div>
     ${(j.verifyPorter||j.verify1||j.verify2||j.verifyRR)?`<div class="verify-box">
       <div class="eyebrow" style="margin-bottom:8px">${svg('wristband')} การยืนยันป้ายข้อมือผู้ป่วย</div>
       ${verifyLine('รับจากหอผู้ป่วย', j.verifyPorter)}
@@ -801,6 +742,7 @@ function openJourney(id){
     ${action?`<button class="btn btn-primary" onclick="doAction('${j.id}','${action.to}')" style="margin-top:8px">${svg(action.icon)} ${action.label}</button>`:''}
     ${canCancel(j)?`<button class="btn btn-soft danger-soft" style="margin-top:10px" onclick="openCancelSheet('${j.id}')">${svg('x')} ยกเลิก Journey นี้</button>`:''}
     ${j.status==='CANCELLED'&&j.cancel_reason?`<div class="notice emerg-notice" style="margin-top:14px">${svg('info')}<span>ยกเลิกแล้ว · เหตุผล: ${esc(j.cancel_reason)}</span></div>`:''}
+    <button class="btn btn-ghost" style="margin:14px auto 0;width:auto" onclick="UI.closeSheet()">ปิด</button>
   `);
 }
 function timeline(j){
@@ -875,7 +817,7 @@ function openApprove(id, name){
       </div>
       <div class="field">
         <label>บทบาท</label>
-        ${dd('apvRole', ['WARD','PORTER','OR','PR','ADMIN'].map(r=>({v:r,label:ROLES[r].name+' ('+r+')'})), '', '— เลือกบทบาท —')}
+        ${dd('apvRole', ['WARD','PORTER','OR','RR','PR','ADMIN'].map(r=>({v:r,label:ROLES[r].name+' ('+r+')'})), '', '— เลือกบทบาท —')}
       </div>
       <div class="field" style="margin-bottom:0">
         <label>หอผู้ป่วย <span class="help" style="display:inline">(เฉพาะบทบาทหอผู้ป่วย)</span></label>
@@ -1136,71 +1078,6 @@ async function commitRRReceive(jid){
   else UI.toast(res.msg,'err');
 }
 
-/* ---------------------------- DESTINATION CHOICES ----------------------- */
-/* OR at end of surgery: RR (queue for recovery) / ICU / straight back to ward. */
-let _sdDest='', _sdWard='';
-function openSurgeryDoneSheet(j){ _sdDest=''; _sdWard=j.ward_id||''; renderSurgeryDoneSheet(j); }
-function sdPick(d, jid){ _sdDest=d; renderSurgeryDoneSheet(Store.journeys.find(x=>x.id===jid)); }
-function destOpt(cur, d, ic, label, sub, pick, jid){
-  return `<button class="btn ${cur===d?'btn-primary':'btn-soft'}" style="justify-content:flex-start;gap:11px;text-align:left;min-height:56px;margin-bottom:10px" onclick="${pick}('${d}','${jid}')">
-    ${svg(ic)}<span><b>${label}</b><br><span style="font-size:12px;opacity:.75">${sub}</span></span></button>`;
-}
-function renderSurgeryDoneSheet(j){
-  UI.openSheet(`<h3>ผ่าตัดเสร็จ · ส่งต่อ</h3><p class="sheet-sub">${AV[j.avatar_id].name} · ${j.case_code}</p>
-    ${destOpt(_sdDest,'RR','heart','ห้องพักฟื้น (RR)','ส่งเข้าคิวให้ห้องพักฟื้นรับต่อ','sdPick',j.id)}
-    ${destOpt(_sdDest,'ICU','activity','ICU','บันทึกว่าส่ง ICU แล้วปิดเคส','sdPick',j.id)}
-    ${destOpt(_sdDest,'WARD','bed','กลับหอผู้ป่วยเลย','ไม่ผ่านห้องพักฟื้น','sdPick',j.id)}
-    ${_sdDest==='WARD'?`<div class="field" style="margin:4px 0 14px"><label>หอปลายทาง</label>${dd('sdWard', WARDS.map(w=>({v:w.id,label:w.name})), _sdWard||j.ward_id, '— เลือกหอ —')}<div class="help">ค่าเริ่มต้นคือหอเดิม เปลี่ยนได้</div></div>`:''}
-    <button class="btn btn-primary" ${_sdDest?'':'disabled style="opacity:.45"'} onclick="commitSurgeryDone('${j.id}')">${svg('check')} ยืนยัน</button>`);
-}
-async function commitSurgeryDone(jid){
-  const j=Store.journeys.find(x=>x.id===jid); if(!j)return;
-  if(!_sdDest){UI.toast('กรุณาเลือกปลายทาง','err');return}
-  if(!Store.online){UI.toast('ไม่มีการเชื่อมต่อ — โปรดลองใหม่','err');return}
-  let res;
-  if(_sdDest==='RR')       res=await Store.route(jid,'SURGERY_FINISHED',{});
-  else if(_sdDest==='ICU') res=await Store.route(jid,'COMPLETED',{discharge_type:'ICU'});
-  else                     res=await Store.route(jid,'COMPLETED',{discharge_type:'WARD',discharge_ward_id:_sdWard||j.ward_id});
-  UI.closeSheet();
-  if(res.ok){UI.toast(_sdDest==='RR'?'ส่งเข้าห้องพักฟื้นแล้ว':_sdDest==='ICU'?'บันทึกส่ง ICU แล้ว':'บันทึกกลับหอผู้ป่วยแล้ว','ok');_sdDest='';render();}
-  else UI.toast(res.msg,'err');
-}
-
-/* RR discharge: ward (choose, default original) / ICU / home. */
-let _rdDest='', _rdWard='';
-function openRRDischargeSheet(j){ _rdDest=''; _rdWard=j.ward_id||''; renderRRDischargeSheet(j); }
-function rdPick(d, jid){ _rdDest=d; renderRRDischargeSheet(Store.journeys.find(x=>x.id===jid)); }
-function renderRRDischargeSheet(j){
-  UI.openSheet(`<h3>ส่งออกจากห้องพักฟื้น</h3><p class="sheet-sub">${AV[j.avatar_id].name} · ${j.case_code}</p>
-    ${destOpt(_rdDest,'WARD','bed','กลับหอผู้ป่วย','เลือกหอปลายทางได้','rdPick',j.id)}
-    ${destOpt(_rdDest,'ICU','activity','ICU','ส่งต่อห้องผู้ป่วยวิกฤต','rdPick',j.id)}
-    ${destOpt(_rdDest,'HOME','home','กลับบ้าน','จำหน่ายกลับบ้าน','rdPick',j.id)}
-    ${_rdDest==='WARD'?`<div class="field" style="margin:4px 0 14px"><label>หอปลายทาง</label>${dd('rdWard', WARDS.map(w=>({v:w.id,label:w.name})), _rdWard||j.ward_id, '— เลือกหอ —')}<div class="help">ค่าเริ่มต้นคือหอเดิม เปลี่ยนได้</div></div>`:''}
-    <button class="btn btn-primary" ${_rdDest?'':'disabled style="opacity:.45"'} onclick="commitRRDischarge('${j.id}')">${svg('check')} ยืนยันส่งออก</button>`);
-}
-async function commitRRDischarge(jid){
-  const j=Store.journeys.find(x=>x.id===jid); if(!j)return;
-  if(!_rdDest){UI.toast('กรุณาเลือกปลายทาง','err');return}
-  if(!Store.online){UI.toast('ไม่มีการเชื่อมต่อ — โปรดลองใหม่','err');return}
-  let res;
-  if(_rdDest==='WARD')     res=await Store.route(jid,'COMPLETED',{discharge_type:'WARD',discharge_ward_id:_rdWard||j.ward_id});
-  else if(_rdDest==='ICU') res=await Store.route(jid,'COMPLETED',{discharge_type:'ICU'});
-  else                     res=await Store.route(jid,'COMPLETED',{discharge_type:'HOME'});
-  UI.closeSheet();
-  if(res.ok){UI.toast(_rdDest==='WARD'?'ส่งกลับหอผู้ป่วยแล้ว':_rdDest==='ICU'?'บันทึกส่ง ICU แล้ว':'จำหน่ายกลับบ้านแล้ว','ok');_rdDest='';render();}
-  else UI.toast(res.msg,'err');
-}
-
-/* Where a finished case ended up — shown on completed cases. */
-function destText(j){
-  if(j.status!=='COMPLETED') return '';
-  const dt=j.discharge_type;
-  if(dt==='ICU')  return 'ส่ง ICU แล้ว';
-  if(dt==='HOME') return 'จำหน่ายกลับบ้านแล้ว';
-  const w=j.discharge_ward_name||(WARDS.find(x=>x.id===j.discharge_ward_id)||{}).name||j.ward_name;
-  return 'กลับหอผู้ป่วย · '+w;
-}
-
 /* ---------------------------- EMERGENCY (OR-initiated) ------------------- */
 /* An emergency case never waits on the ward or a porter. OR opens the case on the
    spot. If there is no time even for this, do the case and log it afterwards —
@@ -1247,8 +1124,6 @@ async function doAction(jid, to){
   if(t.verify){openVerifySheet(j, t.verify);return}
   if(t.pickup){openPickupSheet(j);return}
   if(t.rrReceive){openRRReceiveSheet(j);return}
-  if(t.surgeryDone){openSurgeryDoneSheet(j);return}
-  if(t.rrDischarge){openRRDischargeSheet(j);return}
   const commit=async ()=>{
     const res=await Store.transition(jid,to,State.role);
     UI.closeSheet();
@@ -1280,24 +1155,16 @@ function historyView(){
 /* ---------------------------- AUDIT LOG (admin) -------------------------- */
 const AUDIT_IC={LOGIN_SUCCESS:'user',JOURNEY_CREATED:'plus',EMERGENCY_CREATED:'alert',WAITING_PORTER:'bed',PORTER_TO_OR:'stretcher',IDENTITY_VERIFIED:'idCard',STATUS_CHANGED:'refresh',PUBLIC_STATUS_LOOKUP:'search',QR_REVOKED:'shield',JOURNEY_COMPLETED:'check',INVALID_TRANSITION:'alert',JOURNEY_CANCELLED:'x'};
 function auditView(){
+  if(!DEMO_MODE && Store.refreshAudit && !Store.audit.length) Store.refreshAudit().then(()=>render());
   return `<div class="notice">${svg('shield')}<span>บันทึกการใช้งานทั้งหมด บันทึกด้วยเวลาจากเซิร์ฟเวอร์ ผู้ดูแลระบบไม่สามารถแก้ไขได้</span></div>
-    <div class="section-title">${svg('list')} เหตุการณ์ล่าสุด <span class="count">${Store.audit.length}</span>
-      ${!DEMO_MODE?`<button class="btn btn-soft btn-sm" id="auditRefreshBtn" style="margin-left:auto" onclick="refreshAuditView()">${svg('refresh')} รีเฟรช</button>`:''}
-    </div>
+    <div class="section-title">${svg('list')} เหตุการณ์ล่าสุด <span class="count">${Store.audit.length}</span></div>
     <div class="tile" style="padding:6px 16px">
-    ${Store.audit.length?Store.audit.slice(0,40).map(a=>`<div class="log-row">
+    ${Store.audit.slice(0,40).map(a=>`<div class="log-row">
       <div class="log-ic" style="${a.success?'':'color:var(--clay);background:var(--clay-tint);border-color:transparent'}">${svg(AUDIT_IC[a.action]||'info')}</div>
       <div class="log-main"><div class="log-act">${a.action}${a.success?'':' · ล้มเหลว'}</div>
       <div class="log-meta">${a.actor} · ${a.resource_type}${a.resource_id?' · '+a.resource_id:''}${a.meta&&Object.keys(a.meta).length?' · '+esc(JSON.stringify(a.meta)):''}</div></div>
-      <div class="log-time">${fmtTime(a.at)}</div></div>`).join(''):`<div class="empty" style="padding:24px 8px"><p>ยังไม่มีบันทึกการใช้งาน</p></div>`}
+      <div class="log-time">${fmtTime(a.at)}</div></div>`).join('')}
     </div>`;
-}
-
-async function refreshAuditView(){
-  const btn=document.getElementById('auditRefreshBtn');
-  if(btn){btn.disabled=true;btn.innerHTML=`<span class="spin"></span> กำลังโหลด...`;}
-  await Store.refreshAudit();
-  if(State.screen==='audit') render();
 }
 
 /* ---------------------------- ADMIN -------------------------------------- */
@@ -1330,94 +1197,16 @@ function adminOpen(k){
     approvals: '<h3>คำขอสมัครใช้งาน</h3><div id="apvBox"><p class="help">กำลังโหลด...</p></div>',
     users: adminUsers(),
     roles: adminRoles(),
-    wards: refAdminShell('wards','วอร์ด','หอผู้ป่วย'),
-    rooms: refAdminShell('rooms','ห้องผ่าตัด','ห้อง'),
+    wards:`<h3>วอร์ด</h3><p class="sheet-sub">${WARDS.length} หอผู้ป่วย</p>${WARDS.map(w=>`<div class="log-row"><div class="log-ic">${svg('bed')}</div><div class="log-main"><div class="log-act">${esc(w.name)}</div></div></div>`).join('')}<p class="help" style="margin-top:12px">แก้ไขได้ที่ตาราง <code>wards</code> ใน Supabase · เคสเก่าอ้างด้วย id จึงไม่กระทบประวัติ</p>`,
+    rooms:`<h3>ห้องผ่าตัด</h3><p class="sheet-sub">${OR_ROOMS.length} ห้อง</p>${OR_ROOMS.map(o=>{
+        const busy=Store.journeys.find(j=>j.or_room_id===o.id && ['OR_VERIFY_1','IN_OR'].includes(j.status));
+        return `<div class="log-row"><div class="log-ic">${svg('door')}</div><div class="log-main"><div class="log-act">${esc(o.name)}</div><div class="log-meta">${busy?'กำลังใช้งาน · '+AV[busy.avatar_id].name:'ว่าง'}</div></div></div>`;
+      }).join('')}<p class="help" style="margin-top:12px">แก้ไขได้ที่ตาราง <code>or_rooms</code> ใน Supabase</p>`,
     avatars:`<h3>อวตาร์</h3><p class="sheet-sub">ชุดอวตาร์ธรรมชาติ นุ่มนวล เป็นกลาง</p><div class="avgrid">${AVATARS.map(a=>`<div class="avpick">${avatarEl(a.id,'sm')}<span class="nm">${a.name}</span></div>`).join('')}</div>`,
     status:`<h3>ป้ายสถานะ</h3><p class="sheet-sub">ภายใน → สาธารณะ</p>${FLOW.map(st=>`<div class="log-row"><div class="log-ic" style="color:${STATUS[st].ink}">${svg(STATUS[st].icon)}</div><div class="log-main"><div class="log-act">${STATUS[st].label}</div><div class="log-meta">${st} · ${STATUS[st].pub}</div></div></div>`).join('')}`,
   };
-  UI.openSheet(map[k]||`<h3>${k}</h3><p class="sheet-sub">ยังไม่พร้อมใช้งาน</p>`);
+  UI.openSheet((map[k]||`<h3>${k}</h3><p class="sheet-sub">ยังไม่พร้อมใช้งาน</p>`)+`<button class="btn btn-ghost" style="margin:14px auto 0;width:auto" onclick="UI.closeSheet()">ปิด</button>`);
   if(k==='approvals') loadApprovals();
-  if(k==='wards' || k==='rooms') loadRefAdmin(k);
-}
-
-/* ---------------------------- REFERENCE DATA EDITOR (wards / OR rooms) --- */
-/* Placeholder shell shown immediately; loadRefAdmin() fills #refBox once the
-   rows are fetched (mirrors the approvals loading pattern). */
-function refAdminShell(kind, title, noun){
-  return `<h3>${title}</h3><p class="sheet-sub" id="refSub">กำลังโหลด...</p>
-    <div id="refBox"><p class="help">กำลังโหลด...</p></div>
-    <div class="field" style="margin-top:16px">
-      <label>เพิ่ม${noun}ใหม่</label>
-      <div style="display:flex;gap:8px">
-        <input class="input" id="refAddName" type="text" placeholder="ชื่อ${noun}" style="flex:1" oninput="_refAddName=this.value" onkeydown="if(event.key==='Enter')commitRefAdd('${kind}')">
-        <button class="btn btn-primary" style="width:auto;padding:0 18px" onclick="commitRefAdd('${kind}')">${svg('plus')}</button>
-      </div>
-    </div>`;
-}
-let _refAddName='', _refEditId=null, _refEditName='';
-async function loadRefAdmin(kind){
-  _refAddName=''; _refEditId=null;
-  const res = await AdminRef.listAll(kind);
-  const box=document.getElementById('refBox'); const sub=document.getElementById('refSub');
-  if(!box) return; // sheet closed before load finished
-  if(!res.ok){ box.innerHTML=`<p class="help" style="color:var(--clay)">${esc(res.msg)}</p>`; if(sub) sub.textContent='โหลดไม่สำเร็จ'; return; }
-  window._refRows = window._refRows||{}; window._refRows[kind]=res.rows;
-  renderRefRows(kind);
-}
-function renderRefRows(kind){
-  const rows=(window._refRows&&window._refRows[kind])||[];
-  const box=document.getElementById('refBox'); const sub=document.getElementById('refSub');
-  if(!box) return;
-  const activeN=rows.filter(r=>r.is_active).length;
-  if(sub) sub.textContent=`${rows.length} รายการ · ใช้งานอยู่ ${activeN}`;
-  const ic = kind==='wards' ? 'bed' : 'door';
-  box.innerHTML = rows.length ? rows.map(r=>{
-    if(_refEditId===r.id){
-      return `<div class="log-row" style="align-items:center">
-        <div class="log-ic">${svg(ic)}</div>
-        <div class="log-main">
-          <input class="input" type="text" value="${esc(r.name)}" style="margin-bottom:8px" oninput="_refEditName=this.value" onkeydown="if(event.key==='Enter')commitRefRename('${kind}','${r.id}')">
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-primary" style="width:auto;padding:0 14px;min-height:38px" onclick="commitRefRename('${kind}','${r.id}')">${svg('check')} บันทึก</button>
-            <button class="btn btn-soft" style="width:auto;padding:0 14px;min-height:38px" onclick="_refEditId=null;renderRefRows('${kind}')">ยกเลิก</button>
-          </div>
-        </div>
-      </div>`;
-    }
-    return `<div class="log-row" style="align-items:center;${r.is_active?'':'opacity:.55'}">
-      <div class="log-ic">${svg(ic)}</div>
-      <div class="log-main">
-        <div class="log-act">${esc(r.name)}${r.is_active?'':' · ปิดใช้งาน'}</div>
-      </div>
-      <div style="display:flex;gap:4px;flex-shrink:0">
-        <button class="icon-btn" style="width:38px;height:38px" onclick="_refEditId='${r.id}';_refEditName='${esc(r.name).replace(/'/g,"&#39;")}';renderRefRows('${kind}')" aria-label="แก้ไขชื่อ">${svg('edit')}</button>
-        <button class="icon-btn" style="width:38px;height:38px" onclick="toggleRefActive('${kind}','${r.id}',${!r.is_active})" aria-label="${r.is_active?'ปิดใช้งาน':'เปิดใช้งาน'}">${svg(r.is_active?'eyeOff':'eye')}</button>
-      </div>
-    </div>`;
-  }).join('') : `<p class="help">ยังไม่มีรายการ</p>`;
-}
-async function commitRefAdd(kind){
-  if(!_refAddName || !_refAddName.trim()){ UI.toast('กรุณากรอกชื่อ','err'); return; }
-  const res = await AdminRef.add(kind, _refAddName);
-  if(!res.ok){ UI.toast(res.msg,'err'); return; }
-  const nm=document.getElementById('refAddName'); if(nm) nm.value='';
-  _refAddName='';
-  UI.toast('เพิ่มแล้ว','ok');
-  loadRefAdmin(kind);
-}
-async function commitRefRename(kind, id){
-  if(!_refEditName || !_refEditName.trim()){ UI.toast('กรุณากรอกชื่อ','err'); return; }
-  const res = await AdminRef.rename(kind, id, _refEditName);
-  if(!res.ok){ UI.toast(res.msg,'err'); return; }
-  _refEditId=null;
-  UI.toast('บันทึกแล้ว','ok');
-  loadRefAdmin(kind);
-}
-async function toggleRefActive(kind, id, active){
-  const res = await AdminRef.setActive(kind, id, active);
-  if(!res.ok){ UI.toast(res.msg,'err'); return; }
-  UI.toast(active?'เปิดใช้งานแล้ว':'ปิดใช้งานแล้ว — จะไม่ขึ้นให้เลือกในหน้าใหม่ ๆ (เคสเก่ายังอ้างอิงได้)','ok');
-  loadRefAdmin(kind);
 }
 
 /* Read-only directory. Accounts cannot be created from the browser: that needs
