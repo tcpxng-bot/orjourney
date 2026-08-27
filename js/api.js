@@ -510,7 +510,7 @@ const Staff = {
     // full_name during sign-up, so an unapproved name could otherwise appear in
     // the "who confirmed" picker and end up signed against a wristband check.
     const { data, error } = await sb.from('profiles')
-      .select('id, full_name, role').eq('is_active', true).eq('is_provisioned', true);
+      .select('id, full_name, role, can_work_or').eq('is_active', true).eq('is_provisioned', true);
     if(error){
       console.error('[OR Journey] staff list failed:', error);
       this.OR=[]; this.PORTER=[]; this.RR=[];
@@ -518,7 +518,7 @@ const Staff = {
       return {ok:false, msg:'โหลดรายชื่อเจ้าหน้าที่ไม่สำเร็จ', detail:this.error};
     }
     const by = r => (data||[])
-      .filter(p=>p.role===r && p.full_name && p.full_name.trim())
+      .filter(p=>(p.role===r || (r==='OR' && p.can_work_or===true)) && p.full_name && p.full_name.trim())
       .map(p=>({id:p.id, name:p.full_name.trim()}))
       .sort((a,b)=>a.name.localeCompare(b.name,'th'));
     this.OR = by('OR'); this.PORTER = by('PORTER'); this.RR = by('RR');
