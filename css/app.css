@@ -582,7 +582,8 @@ code{font-family:var(--mono);background:rgba(0,0,0,.05);padding:1px 5px;border-r
 
 .inp{position:relative;display:flex;align-items:center}
 .inp .inp-ic{position:absolute;left:14px;color:var(--ink-3);pointer-events:none;width:18px;height:18px}
-.inp .input{padding-left:44px}
+.inp .input{padding-left:44px;min-width:0}
+.email-suffix{flex:0 0 auto;margin-left:12px;padding-right:2px;color:var(--ink-2);font-size:15px;white-space:nowrap}
 .or-sep{display:flex;align-items:center;gap:13px;margin:18px 0;color:var(--ink-3);font-size:13px}
 .or-sep i{flex:1;height:1px;background:var(--line)}
 
@@ -614,4 +615,3 @@ code{font-family:var(--mono);background:rgba(0,0,0,.05);padding:1px 5px;border-r
 .wordmark-m-sub{display:none;text-align:center;font-size:13.5px;color:var(--ink-2);margin:5px 0 22px}
 @media(max-width:900px){.wordmark-m,.wordmark-m-sub{display:block}
   .auth-card h2{font-size:21px}.auth-sub{margin-bottom:20px}}
-
