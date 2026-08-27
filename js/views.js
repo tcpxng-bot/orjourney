@@ -437,12 +437,15 @@ function topbar(){
 }
 function openAccountSheet(){
   const r=ROLES[State.role];
-  UI.openSheet(`<h3>บัญชีเดโม</h3><p class="sheet-sub">คุณกำลังใช้งานในบทบาท ${r.name}</p>
+  const demo=(typeof DEMO_MODE!=='undefined') && DEMO_MODE;
+  const profile=Session.profile||{};
+  const identity=profile.full_name || (Session.user&&Session.user.email) || r.name;
+  UI.openSheet(`<h3>${demo?'บัญชีเดโม':'บัญชีผู้ใช้'}</h3><p class="sheet-sub">${demo?'โหมดข้อมูลจำลอง':esc(identity)} · กำลังใช้งานในบทบาท ${r.name}</p>
     <div class="tile" style="margin-bottom:14px;display:flex;gap:12px;align-items:center">
       <span class="ro-ic" style="width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:${r.tint};color:${r.ink}">${svg(r.icon)}</span>
       <div><div style="font-weight:600">${r.name}</div><div style="font-size:12.5px;color:var(--ink-2)">${r.desc}</div></div></div>
     ${availableRoles().length>1?`<button class="btn btn-soft" style="margin-bottom:10px" onclick="UI.closeSheet();State.screen='role-choice';render()">${svg('refresh')} สลับโหมดการทำงาน</button>`:''}
-    <button class="btn btn-soft" style="margin-bottom:10px" onclick="toggleOnline()">${Store.online?svg('wifiOff'):svg('wifi')} จำลอง${Store.online?'ขาดการเชื่อมต่อ':'กลับมาออนไลน์'}</button>
+    ${demo?`<button class="btn btn-soft" style="margin-bottom:10px" onclick="toggleOnline()">${Store.online?svg('wifiOff'):svg('wifi')} จำลอง${Store.online?'ขาดการเชื่อมต่อ':'กลับมาออนไลน์'}</button>`:''}
     <button class="btn btn-danger" onclick="logout()">${svg('logout')} ออกจากระบบ</button>`);
 }
 function toggleOnline(){Store.online=!Store.online;UI.closeSheet();render();UI.toast(Store.online?'เชื่อมต่อเรียลไทม์แล้ว':'การเชื่อมต่อขาดหาย — จะซิงก์อัตโนมัติเมื่อกลับมาออนไลน์',Store.online?'ok':'err')}
