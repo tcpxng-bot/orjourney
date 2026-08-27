@@ -350,6 +350,8 @@ function availableRoles(){
   const p=Session.profile||{};
   const roles=[p.role].filter(Boolean);
   if(p.can_work_or && !roles.includes('OR')) roles.push('OR');
+  if(p.can_work_rr && !roles.includes('RR')) roles.push('RR');
+  if(p.can_work_porter && !roles.includes('PORTER')) roles.push('PORTER');
   return roles;
 }
 
