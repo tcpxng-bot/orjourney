@@ -172,7 +172,6 @@ function viewLogin(){
         ${helpLine('ลืมรหัสผ่าน หรือเข้าใช้งานไม่ได้')}
         `}
 
-        <div class="notice" style="margin-top:22px">${svg('shield')}<span>ระบบนี้ไม่เก็บชื่อผู้ป่วย HN เลขบัตรประชาชน การวินิจฉัย หรือชื่อหัตถการ ข้อมูลทั้งหมดเป็นเพียงสถานะกระบวนการเท่านั้น</span></div>
         <p class="buildstamp">build ${typeof OJ_BUILD!=='undefined'?OJ_BUILD:'—'}${DEMO_MODE?' · demo':''}</p>
       </div>
     </main>
