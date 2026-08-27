@@ -614,3 +614,4 @@ code{font-family:var(--mono);background:rgba(0,0,0,.05);padding:1px 5px;border-r
 .wordmark-m-sub{display:none;text-align:center;font-size:13.5px;color:var(--ink-2);margin:5px 0 22px}
 @media(max-width:900px){.wordmark-m,.wordmark-m-sub{display:block}
   .auth-card h2{font-size:21px}.auth-sub{margin-bottom:20px}}
+
